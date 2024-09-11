@@ -148,7 +148,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 
 	/* ========== MUTATIVE FUNCTIONS ========== */
 
-	function stake(uint256 amount) external nonReentrant updateRewards(msg.sender) {
+	function stake(uint256 amount) external virtual nonReentrant updateRewards(msg.sender) {
 		_stake(msg.sender, amount);
 
 		stakingToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -168,7 +168,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 		voSpool.mintGradual(account, amount);
 	}
 
-	function compound(bool doCompoundVoSpoolRewards) external nonReentrant {
+	function compound(bool doCompoundVoSpoolRewards) external virtual nonReentrant {
 		// collect SPOOL earned fom spool rewards and stake them
 		uint256 reward = _getRewardForCompound(msg.sender, doCompoundVoSpoolRewards);
 
@@ -189,7 +189,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 		}
 	}
 
-	function unstake(uint256 amount) public nonReentrant notStakedBy updateRewards(msg.sender) {
+	function unstake(uint256 amount) public virtual nonReentrant notStakedBy updateRewards(msg.sender) {
 		require(amount > 0, "SpoolStaking::unstake: Cannot withdraw 0");
 		require(amount <= balances[msg.sender], "SpoolStaking::unstake: Cannot unstake more than staked");
 
@@ -234,7 +234,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 		}
 	}
 
-	function getRewards(IERC20[] memory tokens, bool doClaimVoSpoolRewards) external nonReentrant notStakedBy {
+	function getRewards(IERC20[] memory tokens, bool doClaimVoSpoolRewards) external virtual nonReentrant notStakedBy {
 		for (uint256 i; i < tokens.length; i++) {
 			_getReward(tokens[i], msg.sender);
 		}
@@ -244,7 +244,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 		}
 	}
 
-	function getActiveRewards(bool doClaimVoSpoolRewards) external nonReentrant notStakedBy {
+	function getActiveRewards(bool doClaimVoSpoolRewards) external virtual nonReentrant notStakedBy {
 		_getActiveRewards(msg.sender);
 
 		if (doClaimVoSpoolRewards) {
@@ -252,7 +252,19 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 		}
 	}
 
-	function getUpdatedVoSpoolRewardAmount() external returns (uint256 rewards) {
+    function getAccountRewards(address account, IERC20 token) external updateRewards(account) returns (uint256){
+        // get SPOOL based rewards
+        RewardConfiguration storage config = rewardConfiguration[token];
+        uint256 reward = config.rewards[account];
+
+        // get voSPOOL based rewards
+        uint256 voSpoolReward = voSpoolRewards.flushRewards(account);
+
+        return reward + voSpoolReward;
+    }
+
+
+	function getUpdatedVoSpoolRewardAmount() external virtual returns (uint256 rewards) {
 		// update rewards
 		rewards = voSpoolRewards.updateRewards(msg.sender);
 		// update and store users voSPOOL
@@ -293,6 +305,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 
 	function stakeFor(address account, uint256 amount)
 		external
+        virtual
 		nonReentrant
 		canStakeForAddress(account)
 		updateRewards(account)
@@ -314,7 +327,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 	 *
 	 * @param allowFor address to allow unstaking for
 	 */
-	function allowUnstakeFor(address allowFor) external {
+	function allowUnstakeFor(address allowFor) external virtual {
 		require(
 			(canStakeFor[msg.sender] && stakedBy[allowFor] == msg.sender) || isSpoolOwner(),
 			"SpoolStaking::allowUnstakeFor: Cannot allow unstaking for address"
