@@ -47,19 +47,4 @@ library SafeCast {
         require(value <= type(uint192).max, "SafeCast: value doesn't fit in 128 bits");
         return uint192(value);
     }
-
-    /**
-     * @dev Returns the downcasted uint128 from uint256, reverting on
-     * overflow (when the input is greater than largest uint128).
-     *
-     * Counterpart to Solidity's `uint128` operator.
-     *
-     * Requirements:
-     *
-     * - input must fit into 128 bits
-     */
-    function toUint128(uint256 value) internal pure returns (uint128) {
-        require(value <= type(uint128).max, "SafeCast: value doesn't fit in 128 bits");
-        return uint128(value);
-    }
 }

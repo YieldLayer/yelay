@@ -2,11 +2,11 @@
 
 pragma solidity 0.8.13;
 
-import "./external/@openzeppelin/security/Pausable.sol";
-import "./external/spool-core/SpoolOwnable.sol";
+import "openzeppelin-contracts/security/Pausable.sol";
+import "spool-core/SpoolOwnable.sol";
 import "./interfaces/IRewardDistributor.sol";
 
-import "./external/@openzeppelin/token/ERC20/utils/SafeERC20.sol";
+import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @notice Implementation of the {IRewardDistributor} interface.

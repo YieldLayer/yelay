@@ -2,11 +2,11 @@
 
 pragma solidity 0.8.13;
 
-import "./external/@openzeppelin/security/ReentrancyGuardUpgradeable.sol";
-import "./external/spool-core/SpoolOwnable.sol";
+import "openzeppelin-contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "spool-core/SpoolOwnable.sol";
 import "./interfaces/ISpoolStaking.sol";
 
-import "./external/@openzeppelin/token/ERC20/utils/SafeERC20.sol";
+import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 import "./external/@openzeppelin/utils/SafeCast.sol";
 import "./interfaces/IVoSpoolRewards.sol";
 import "./interfaces/IVoSPOOL.sol";

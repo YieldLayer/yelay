@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.13;
 
-import "./external/spool-core/SpoolOwnable.sol";
+import "spool-core/SpoolOwnable.sol";
 import "./interfaces/IVoSpoolRewards.sol";
 
 import "./interfaces/IVoSPOOL.sol";

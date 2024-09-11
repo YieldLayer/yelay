@@ -3,7 +3,7 @@
 pragma solidity 0.8.13;
 
 import "./interfaces/ISpoolOwner.sol";
-import "../@openzeppelin/access/Ownable.sol";
+import "openzeppelin-contracts/access/Ownable.sol";
 
 /**
  * @notice Implementation of the {ISpoolOwner} interface.
