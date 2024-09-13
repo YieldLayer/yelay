@@ -110,7 +110,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 	/// @dev we trim gradual mint amount by `TRIM_SIZE`, so it takes less storage
 	uint256 internal immutable TRIM_SIZE;
 	/// @notice number of tranche amounts stored in one 256bit word
-	uint256 private constant TRANCHES_PER_WORD = 5;
+	uint256 internal constant TRANCHES_PER_WORD = 5;
 
 	/// @notice duration of one tranche
 	uint256 public constant TRANCHE_TIME = 1 weeks;
@@ -170,26 +170,15 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 	 * - first tranche time must must be less than full tranche time in the future
 	 *
 	 * @param _spoolOwner address of spool owner contract
-	 * @param _firstTrancheEndTime first tranche end time after the deployment
+     * @param _trimSize trim size to reduce minting amount
+     * @param _fullPowerTranchesCount number of tranches to mature to full power
+     * @param _name token name
+     * @param _symbol token symbol
 	 */
-	constructor(ISpoolOwner _spoolOwner, uint256 _firstTrancheEndTime, uint256 _TRIM_SIZE, uint256 _FULL_POWER_TRANCHES_COUNT, string memory _name, string memory _symbol) SpoolOwnable(_spoolOwner) {
-		require(
-			_firstTrancheEndTime > block.timestamp,
-			"voSPOOL::constructor: First tranche end time must be in the future"
-		);
-		require(
-			_firstTrancheEndTime < block.timestamp + TRANCHE_TIME,
-			"voSPOOL::constructor: First tranche end time must be less than full tranche time in the future"
-		);
-
-		unchecked {
-			// set first tranche start time
-			firstTrancheStartTime = _firstTrancheEndTime - TRANCHE_TIME;
-		}
-
-        TRIM_SIZE = _TRIM_SIZE;
-        FULL_POWER_TRANCHES_COUNT = _FULL_POWER_TRANCHES_COUNT;
-	    FULL_POWER_TIME = TRANCHE_TIME * _FULL_POWER_TRANCHES_COUNT;
+	constructor(ISpoolOwner _spoolOwner, uint256 _trimSize, uint256 _fullPowerTranchesCount, string memory _name, string memory _symbol) SpoolOwnable(_spoolOwner) {
+        TRIM_SIZE = _trimSize;
+        FULL_POWER_TRANCHES_COUNT = _fullPowerTranchesCount;
+	    FULL_POWER_TIME = TRANCHE_TIME * _fullPowerTranchesCount;
         name = _name;
         symbol = _symbol;
 	}
@@ -552,6 +541,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 		bool burnAll
 	) external onlyGradualMinter updateGradual updateGradualUser(from) {
 		UserGradual memory _userGradual = _userGraduals[from];
+		GlobalGradual memory global = _globalGradual;
 		uint48 userTotalGradualAmount = _userGradual.maturedVotingPower + _userGradual.maturingAmount;
 
 		// remove user matured power
@@ -562,13 +552,13 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 
 		// remove user maturing
 		if (_userGradual.maturingAmount > 0) {
-			_globalGradual.totalMaturingAmount -= _userGradual.maturingAmount;
+            _updateTotalMaturingAmount(global, _userGradual.maturingAmount);
 			_userGradual.maturingAmount = 0;
 		}
 
 		// remove user unmatured power
 		if (_userGradual.rawUnmaturedVotingPower > 0) {
-			_globalGradual.totalRawUnmaturedVotingPower -= _userGradual.rawUnmaturedVotingPower;
+            _updateTotalRawUnmaturedVotingPower(global, _userGradual.rawUnmaturedVotingPower);
 			_userGradual.rawUnmaturedVotingPower = 0;
 		}
 
@@ -591,6 +581,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 
 		// apply changes to storage
 		_userGraduals[from] = _userGradual;
+        _globalGradual = global;
 
 		emit GradualBurned(from, amount, burnAll);
 
@@ -684,6 +675,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 			_updateGradualForTrancheIndex(global);
 			didUpdate = true;
 		}
+
 	}
 
 	/**
@@ -701,17 +693,18 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 		// do only if contract is old enough so full power could be achieved
 		if (global.lastUpdatedTrancheIndex >= FULL_POWER_TRANCHES_COUNT) {
 			uint256 maturedIndex = global.lastUpdatedTrancheIndex - FULL_POWER_TRANCHES_COUNT + 1;
-
+            
 			uint48 newMaturedVotingPower = _getTranche(maturedIndex).amount;
 
 			// if there is any new fully-matured voting power, update
 			if (newMaturedVotingPower > 0) {
 				// remove new fully matured voting power from non matured raw one
 				uint56 newMaturedAsRawUnmatured = _getMaturedAsRawUnmaturedAmount(newMaturedVotingPower);
-				global.totalRawUnmaturedVotingPower -= newMaturedAsRawUnmatured;
+				_updateTotalRawUnmaturedVotingPower(global, newMaturedAsRawUnmatured);
 
 				// remove new fully-matured power from maturing amount
-				global.totalMaturingAmount -= newMaturedVotingPower;
+				_updateTotalMaturingAmount(global, newMaturedVotingPower);
+
 				// add new fully-matured voting power
 				global.totalMaturedVotingPower += newMaturedVotingPower;
 			}
@@ -1088,6 +1081,38 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 		unchecked {
 			return uint56(amount * FULL_POWER_TRANCHES_COUNT);
 		}
+	}
+
+	function _updateTotalRawUnmaturedVotingPower(GlobalGradual memory global, uint56 newMaturedAsRawUnmatured) private pure {
+        if(global.totalRawUnmaturedVotingPower < newMaturedAsRawUnmatured) {
+            global.totalRawUnmaturedVotingPower = 0;
+        } else {
+            global.totalRawUnmaturedVotingPower -= newMaturedAsRawUnmatured;
+        }
+	}
+
+	function _updateTotalMaturingAmount(GlobalGradual memory global, uint48 newMaturedVotingPower) private pure {
+        if(global.totalMaturingAmount < newMaturedVotingPower) {
+            global.totalMaturingAmount = 0;
+        } else {
+            global.totalMaturingAmount -= newMaturedVotingPower;
+        }
+	}
+
+	function _updateRawUnmaturedVotingPower(UserGradual memory _userGradual, uint56 newMaturedAsRawUnmatured) private pure {
+        if(_userGradual.rawUnmaturedVotingPower < newMaturedAsRawUnmatured) {
+            _userGradual.rawUnmaturedVotingPower = 0;
+        } else {
+            _userGradual.rawUnmaturedVotingPower -= newMaturedAsRawUnmatured;
+        }
+	}
+
+	function _updateMaturingAmount(UserGradual memory _userGradual, uint48 newMaturedVotingPower) private pure {
+        if(_userGradual.maturingAmount < newMaturedVotingPower) {
+            _userGradual.maturingAmount = 0;
+        } else {
+            _userGradual.maturingAmount -= newMaturedVotingPower;
+        }
 	}
 
 	/* ========== OWNER FUNCTIONS ========== */

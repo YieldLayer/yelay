@@ -8,9 +8,10 @@ import "./interfaces/ISpoolStaking.sol";
 
 import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 import "./external/@openzeppelin/utils/SafeCast.sol";
-import "./interfaces/IVoSpoolRewards.sol";
 import "./interfaces/IVoSPOOL.sol";
 import "./interfaces/IRewardDistributor.sol";
+
+import "forge-std/console.sol";
 
 /* ========== STRUCTS ========== */
 
@@ -52,9 +53,6 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 	/// @notice voSPOOL token address
 	IVoSPOOL public immutable voSpool;
 
-	/// @notice voSPOOL token rewards address
-	IVoSpoolRewards public immutable voSpoolRewards;
-
 	/// @notice Spool reward distributor
 	IRewardDistributor public immutable rewardDistributor;
 
@@ -87,20 +85,17 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 	 *
 	 * @param _stakingToken SPOOL token
 	 * @param _voSpool Spool voting token (voSPOOL)
-	 * @param _voSpoolRewards voSPOOL rewards contract
 	 * @param _rewardDistributor reward distributor contract
 	 * @param _spoolOwner Spool DAO owner contract
 	 */
 	constructor(
 		IERC20 _stakingToken,
 		IVoSPOOL _voSpool,
-		IVoSpoolRewards _voSpoolRewards,
 		IRewardDistributor _rewardDistributor,
 		ISpoolOwner _spoolOwner
 	) SpoolOwnable(_spoolOwner) {
 		stakingToken = _stakingToken;
 		voSpool = _voSpool;
-		voSpoolRewards = _voSpoolRewards;
 		rewardDistributor = _rewardDistributor;
 	}
 
@@ -168,19 +163,13 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 		voSpool.mintGradual(account, amount);
 	}
 
-	function compound(bool doCompoundVoSpoolRewards) external virtual nonReentrant {
+	function compound() external virtual nonReentrant {
 		// collect SPOOL earned fom spool rewards and stake them
-		uint256 reward = _getRewardForCompound(msg.sender, doCompoundVoSpoolRewards);
+		uint256 reward = _getRewardForCompound(msg.sender);
 
 		if (reward > 0) {
 			// update user rewards before staking
 			_updateSpoolRewards(msg.sender);
-
-			// update user voSPOOL based reward before staking
-			// skip updating voSPOOL reward if we compounded form it as it's already updated
-			if (!doCompoundVoSpoolRewards) {
-				_updateVoSpoolReward(msg.sender);
-			}
 
 			// stake collected reward
 			_stake(msg.sender, reward);
@@ -210,7 +199,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 		emit Unstaked(msg.sender, amount);
 	}
 
-	function _getRewardForCompound(address account, bool doCompoundVoSpoolRewards)
+	function _getRewardForCompound(address account)
 		internal
 		updateReward(stakingToken, account)
 		returns (uint256 reward)
@@ -222,34 +211,16 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 			config.rewards[account] = 0;
 			emit RewardCompounded(msg.sender, reward);
 		}
-
-		if (doCompoundVoSpoolRewards) {
-			_updateVoSpoolReward(account);
-			uint256 voSpoolreward = voSpoolRewards.flushRewards(account);
-
-			if (voSpoolreward > 0) {
-				reward += voSpoolreward;
-				emit VoRewardCompounded(msg.sender, reward);
-			}
-		}
 	}
 
-	function getRewards(IERC20[] memory tokens, bool doClaimVoSpoolRewards) external virtual nonReentrant notStakedBy {
+	function getRewards(IERC20[] memory tokens) external virtual nonReentrant notStakedBy {
 		for (uint256 i; i < tokens.length; i++) {
 			_getReward(tokens[i], msg.sender);
 		}
-
-		if (doClaimVoSpoolRewards) {
-			_getVoSpoolRewards(msg.sender);
-		}
 	}
 
-	function getActiveRewards(bool doClaimVoSpoolRewards) external virtual nonReentrant notStakedBy {
+	function getActiveRewards() external virtual nonReentrant notStakedBy {
 		_getActiveRewards(msg.sender);
-
-		if (doClaimVoSpoolRewards) {
-			_getVoSpoolRewards(msg.sender);
-		}
 	}
 
     function getAccountRewards(address account, IERC20 token) external updateRewards(account) returns (uint256){
@@ -257,19 +228,9 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
         RewardConfiguration storage config = rewardConfiguration[token];
         uint256 reward = config.rewards[account];
 
-        // get voSPOOL based rewards
-        uint256 voSpoolReward = voSpoolRewards.flushRewards(account);
-
-        return reward + voSpoolReward;
+        return reward;
     }
 
-
-	function getUpdatedVoSpoolRewardAmount() external virtual returns (uint256 rewards) {
-		// update rewards
-		rewards = voSpoolRewards.updateRewards(msg.sender);
-		// update and store users voSPOOL
-		voSpool.updateUserVotingPower(msg.sender);
-	}
 
 	function _getActiveRewards(address account) internal {
 		uint256 _rewardTokensCount = rewardTokens.length;
@@ -288,16 +249,6 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 			config.rewards[account] = 0;
 			rewardDistributor.payReward(account, token, reward);
 			emit RewardPaid(token, account, reward);
-		}
-	}
-
-	function _getVoSpoolRewards(address account) internal {
-		_updateVoSpoolReward(account);
-		uint256 reward = voSpoolRewards.flushRewards(account);
-
-		if (reward > 0) {
-			rewardDistributor.payReward(account, stakingToken, reward);
-			emit VoSpoolRewardPaid(stakingToken, account, reward);
 		}
 	}
 
@@ -476,9 +427,6 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 	function _updateRewards(address account) private {
 		// update SPOOL based rewards
 		_updateSpoolRewards(account);
-
-		// update voSPOOL based reward
-		_updateVoSpoolReward(account);
 	}
 
 	function _updateSpoolRewards(address account) private {
@@ -496,22 +444,6 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 			config.rewards[account] = earned(token, account);
 			config.userRewardPerTokenPaid[account] = config.rewardPerTokenStored;
 		}
-	}
-
-	/**
-	 * @notice Update rewards collected from account voSPOOL
-	 * @dev
-	 * First we update rewards calling `voSpoolRewards.updateRewards`
-	 * - Here we only simulate the reward accumulated over tranches
-	 * Then we update and store users power by calling voSPOOL contract
-	 * - Here we actually store the udated values.
-	 * - If store wouldn't happen, next time we'd simulate the same voSPOOL tranches again
-	 */
-	function _updateVoSpoolReward(address account) private {
-		// update rewards
-		voSpoolRewards.updateRewards(account);
-		// update and store users voSPOOL
-		voSpool.updateUserVotingPower(account);
 	}
 
 	function _removeReward(IERC20 token) private {

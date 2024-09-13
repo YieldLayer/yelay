@@ -74,7 +74,7 @@ contract VoSpoolRewards is SpoolOwnable, IVoSpoolRewards {
 	/* ========== CONSTANTS ========== */
 
 	/// @notice amount of tranches to mature to full power
-	uint256 private constant FULL_POWER_TRANCHES_COUNT = 52 * 3;
+	uint256 private immutable FULL_POWER_TRANCHES_COUNT;
 
 	/// @notice number of tranche amounts stored in one 256bit word
 	uint256 private constant TRANCHES_PER_WORD = 5;
@@ -114,10 +114,12 @@ contract VoSpoolRewards is SpoolOwnable, IVoSpoolRewards {
 	constructor(
 		address _spoolStaking,
 		IVoSPOOL _voSpool,
-		ISpoolOwner _spoolOwner
+		ISpoolOwner _spoolOwner,
+        uint _fullPowerTranchesCount
 	) SpoolOwnable(_spoolOwner) {
 		spoolStaking = _spoolStaking;
 		voSpool = _voSpool;
+        FULL_POWER_TRANCHES_COUNT = _fullPowerTranchesCount;
 	}
 
 	/* ========== REWARD CONFIGURATION ========== */
@@ -561,7 +563,7 @@ contract VoSpoolRewards is SpoolOwnable, IVoSpoolRewards {
 	 * @param rawMaturingVotingPower raw maturing voting power amount
 	 * @return maturingVotingPower actual maturing power amount
 	 */
-	function _getMaturingVotingPowerFromRaw(uint256 rawMaturingVotingPower) private pure returns (uint256) {
+	function _getMaturingVotingPowerFromRaw(uint256 rawMaturingVotingPower) private view returns (uint256) {
 		return rawMaturingVotingPower / FULL_POWER_TRANCHES_COUNT;
 	}
 
