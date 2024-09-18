@@ -11,11 +11,11 @@ import {MockToken} from "test/mocks/MockToken.sol";
 import "test/shared/Utilities.sol";
 import {YLAY} from "src/YLAY.sol";
 import {YelayOwner} from "src/YelayOwner.sol";
-import {SYLAYRewards} from "src/SYLAYRewards.sol";
+import {sYLAYRewards} from "src/sYLAYRewards.sol";
 import {RewardDistributor} from "spool-staking-and-voting/RewardDistributor.sol";
 import {SpoolStaking} from "spool-staking-and-voting/SpoolStaking.sol";
 import {VoSPOOL, IVoSPOOL} from "spool-staking-and-voting/VoSPOOL.sol";
-import {SYLAY} from "src/SYLAY.sol";
+import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
 import {YelayStaking, IERC20} from "src/YelayStaking.sol";
 import {YelayMigrator} from "src/YelayMigrator.sol";
 
@@ -30,11 +30,11 @@ contract YelayStakingTest is Test, Utilities {
     ISpoolOwner spoolOwner;
     YelayOwner yelayOwner;
     YLAY yLAY;
-    SYLAY sYLAY;
+    sYLAY sYlay;
     RewardDistributor rewardDistributor;
     YelayStaking yelayStaking;
     YelayMigrator yelayMigrator;
-    SYLAYRewards sYlayRewards;
+    sYLAYRewards sYlayRewards;
 
     IERC20 rewardToken1;
     IERC20 rewardToken2;
@@ -75,13 +75,14 @@ contract YelayStakingTest is Test, Utilities {
         assert(address(spoolOwner) == precomputedSpoolOwnerAddress);
 
         // Step 3: Deploy YLAY at precomputedYLAYAddress
-        new YLAY(yelayOwner, YelayMigrator(precomputedMigratorAddress));
+        new YLAY(yelayOwner, precomputedMigratorAddress);
         yLAY = YLAY(address(new ERC1967Proxy(precomputedYLAYImplementationAddress, "")));
         assert(address(yLAY) == precomputedYLAYAddress);
 
-        // Step 4: Deploy sYLAY at precomputedSYLAYAddress
-        sYLAY = new SYLAY(spoolOwner, address(voSPOOL));
-        assert(address(sYLAY) == precomputedSYLAYAddress);
+        // Step 4: Deploy sYlay at precomputedSYLAYAddress
+        // sYlay = new sYLAY(address(yelayOwner), address(voSPOOL), precomputedMigratorAddress);
+        sYlay = new sYLAY(address(yelayOwner), address(voSPOOL));
+        assert(address(sYlay) == precomputedSYLAYAddress);
 
         // Step 5: Deploy RewardDistributor at precomputedRewardDistributorAddress
         rewardDistributor = new RewardDistributor(spoolOwner);
@@ -91,7 +92,7 @@ contract YelayStakingTest is Test, Utilities {
         yelayStaking = new YelayStaking(
             address(spoolOwner),
             address(yLAY),
-            address(sYLAY),
+            address(sYlay),
             precomputedSYLAYRewardsAddress,
             address(rewardDistributor),
             address(spoolStaking),
@@ -100,10 +101,10 @@ contract YelayStakingTest is Test, Utilities {
         assert(address(yelayStaking) == precomputedYelayStakingAddress);
 
         // Step 7: Deploy Migrator at precomputedMigratorAddress
-        yelayMigrator = new YelayMigrator(address(spoolOwner), yLAY, sYLAY, address(yelayStaking), address(SPOOL));
+        yelayMigrator = new YelayMigrator(address(spoolOwner), yLAY, sYlay, address(yelayStaking), address(SPOOL));
         assert(address(yelayMigrator) == precomputedMigratorAddress);
 
-        sYlayRewards = new SYLAYRewards(address(spoolOwner), address(sYLAY), address(yelayStaking));
+        sYlayRewards = new sYLAYRewards(address(spoolOwner), address(sYlay), address(yelayStaking));
         assert(address(sYlayRewards) == precomputedSYLAYRewardsAddress);
 
         yLAY.initialize();
@@ -124,7 +125,7 @@ contract YelayStakingTest is Test, Utilities {
         // Set pauser, distributor, and gradual minter permissions
         rewardDistributor.setPauser(pauser, true);
         rewardDistributor.setDistributor(address(yelayStaking), true);
-        sYLAY.setGradualMinter(address(yelayStaking), true);
+        sYlay.setGradualMinter(address(yelayStaking), true);
 
         // Set the staking permissions for different wallets
         yelayStaking.setCanStakeFor(stakeForWallet, true);
@@ -232,21 +233,21 @@ contract YelayStakingTest is Test, Utilities {
         assertEq(user1BalanceDiff, stakeAmount);
         assertEq(yelayStaking.balances(user1), stakeAmount);
 
-        // Verify sYLAY
+        // Verify sYlay
         uint256 userAmount = trim(stakeAmount); // Assume trim() is a helper function, may need custom implementation
-        IVoSPOOL.UserGradual memory userGradual = sYLAY.getUserGradual(user1);
+        IsYLAYBase.UserGradual memory userGradual = sYlay.getUserGradual(user1);
         assertEq(userGradual.maturingAmount, userAmount);
 
         // Advance time by one week
         vm.warp(block.timestamp + 1 weeks);
 
-        // Verify sYLAY after one week
+        // Verify sYlay after one week
         uint256 expectedMaturedAmount = getVotingPowerForTranchesPassed(stakeAmount, 1); // Assume this function exists
-        uint256 sYLAYBalance = sYLAY.balanceOf(user1);
+        uint256 sYLAYBalance = sYlay.balanceOf(user1);
         assertEq(sYLAYBalance, expectedMaturedAmount);
     }
 
-    /// @notice Stake and wait, should receive sYLAY after a week
+    /// @notice Stake and wait, should receive sYlay after a week
     function test_stakeAndWait() public setUpRewardRate {
         // ARRANGE
         uint256 stakeAmount = 1000 ether; // Amount to stake
@@ -269,7 +270,7 @@ contract YelayStakingTest is Test, Utilities {
     //Section 4: Compound
     //---------------------------------- */
 
-    // Add YLAY reward token 1 and sYLAY reward
+    // Add YLAY reward token 1 and sYlay reward
     modifier setUpCompound() {
         rewardAmount = 10000 ether; // Reward amount in ether
         rewardDuration = uint32(10 days); // 10 days
@@ -350,21 +351,21 @@ contract YelayStakingTest is Test, Utilities {
         assertEq(user1balanceDiff, stakeAmount);
         assertEq(yelayStaking.balances(user1), stakeAmount);
 
-        // Verify sYLAY
+        // Verify sYlay
         uint256 userAmount = trim(stakeAmount);
-        IVoSPOOL.UserGradual memory userGradual = sYLAY.getUserGradual(user1);
+        IsYLAYBase.UserGradual memory userGradual = sYlay.getUserGradual(user1);
         assertEq(userGradual.maturingAmount, userAmount);
 
         // Simulate waiting one week
         vm.warp(block.timestamp + 1 weeks);
 
-        // Verify sYLAY after one week
+        // Verify sYlay after one week
         uint256 expectedMaturedAmount = getVotingPowerForTranchesPassed(stakeAmount, 1); // Assume utility function
-        uint256 sYLAYBalance = sYLAY.balanceOf(user1);
+        uint256 sYLAYBalance = sYlay.balanceOf(user1);
         assertEq(sYLAYBalance, expectedMaturedAmount);
     }
 
-    /// @notice Stake for as owner and wait, should receive sYLAY after a week
+    /// @notice Stake for as owner and wait, should receive sYlay after a week
     function test_stakeForAsOwnerAndWait() public setUpStakeFor {
         // ARRANGE
         uint256 stakeAmount = 1000 ether; // Amount to stake
@@ -559,7 +560,7 @@ contract YelayStakingTest is Test, Utilities {
         _;
     }
 
-    /// @notice Unstake after 5 weeks, should burn all sYLAY
+    /// @notice Unstake after 5 weeks, should burn all sYlay
     function test_unstakeAfter5WeeksShouldBurnAllsYLAY() public setUpUnstake {
         // ARRANGE
         uint256 rewardTokenBefore = rewardToken1.balanceOf(user1);
@@ -571,9 +572,9 @@ contract YelayStakingTest is Test, Utilities {
         // Simulate the passage of 5 weeks
         vm.warp(block.timestamp + 5 weeks);
 
-        // Calculate expected matured amount for sYLAY
+        // Calculate expected matured amount for sYlay
         uint256 expectedMaturedAmount = getVotingPowerForTranchesPassed(stakeAmount, 5); // Assume utility function
-        assertEq(sYLAY.balanceOf(user1), expectedMaturedAmount);
+        assertEq(sYlay.balanceOf(user1), expectedMaturedAmount);
 
         // ACT - Unstake all
         vm.prank(user1);
@@ -581,7 +582,7 @@ contract YelayStakingTest is Test, Utilities {
 
         // ASSERT - After unstaking
         assertEq(yelayStaking.balances(user1), 0);
-        assertEq(sYLAY.balanceOf(user1), 0); // sYLAY balance should be 0
+        assertEq(sYlay.balanceOf(user1), 0); // sYlay balance should be 0
 
         // ACT - Claim rewards
         vm.prank(user1);
@@ -686,8 +687,8 @@ contract YelayStakingTest is Test, Utilities {
         vm.warp(block.timestamp + 5 weeks);
 
         // get user1 maturingAmount before
-        IVoSPOOL.UserGradual memory user1Gradual = sYLAY.getUserGradual(user1);
-        IVoSPOOL.UserGradual memory user2Gradual;
+        IsYLAYBase.UserGradual memory user1Gradual = sYlay.getUserGradual(user1);
+        IsYLAYBase.UserGradual memory user2Gradual;
         uint256 maturingAmountBefore = user1Gradual.maturingAmount;
 
         // Get current balances, canStakeFor, and stakedBy for user1 before transfer
@@ -720,9 +721,9 @@ contract YelayStakingTest is Test, Utilities {
         uint256 earnedRewardToken1After = yelayStaking.earned(rewardToken1, user1);
         assertEq(earnedRewardToken1After, 0);
 
-        //// Verify sYLAY transfer was also done
-        user1Gradual = sYLAY.getUserGradual(user1);
-        user2Gradual = sYLAY.getUserGradual(user2);
+        //// Verify sYlay transfer was also done
+        user1Gradual = sYlay.getUserGradual(user1);
+        user2Gradual = sYlay.getUserGradual(user2);
 
         assertEq(user1Gradual.maturingAmount, 0);
         assertEq(user2Gradual.maturingAmount, maturingAmountBefore);

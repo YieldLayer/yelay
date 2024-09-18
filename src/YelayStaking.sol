@@ -3,7 +3,7 @@
 pragma solidity 0.8.13;
 
 // import "src/external/spool-staking-and-voting/SpoolStaking.sol";
-import "src/interfaces/ISYLAY.sol";
+import "src/interfaces/IsYLAY.sol";
 import "src/libraries/ConversionLib.sol";
 
 import "forge-std/console.sol";
@@ -14,7 +14,7 @@ contract YelayStaking is SpoolStaking2 {
     /* ========== STATE VARIABLES ========== */
 
     /// @notice The interface for staked YLAY (sYLAY) tokens.
-    ISYLAY public immutable sYLAY;
+    IsYLAY public immutable sYLAY;
 
     /// @notice The SpoolStaking contract, used for migration purposes.
     SpoolStaking2 public immutable spoolStaking;
@@ -48,7 +48,7 @@ contract YelayStaking is SpoolStaking2 {
         address _spoolStaking,
         address _migrator
     ) SpoolStaking2(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _spoolOwner) {
-        sYLAY = ISYLAY(_sYLAY);
+        sYLAY = IsYLAY(_sYLAY);
         spoolStaking = SpoolStaking2(_spoolStaking);
         SPOOL = spoolStaking.stakingToken();
         migrator = _migrator;

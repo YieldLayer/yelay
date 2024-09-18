@@ -5,7 +5,7 @@ pragma solidity 0.8.13;
 import "spool-core/SpoolOwnable.sol";
 import "spool-staking-and-voting/interfaces/ISpoolStaking.sol";
 import "./interfaces/IERC20PausableOwnable.sol";
-import "./interfaces/ISYLAY.sol";
+import "./interfaces/IsYLAY.sol";
 import "./interfaces/IYelayMigrator.sol";
 import "./interfaces/IYelayStaking.sol";
 import "./interfaces/IYLAY.sol";
@@ -24,7 +24,7 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
     IYelayStaking public immutable yelayStaking;
 
     /// @notice Immutable interface for sYLAY (staked YLAY).
-    ISYLAY public immutable sYLAY;
+    IsYLAY public immutable sYLAY;
 
     /// @notice Mapping to track addresses that are blocklisted from migration.
     mapping(address => bool) public blocklist;
@@ -53,7 +53,7 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
      * @param _yelayStaking The address of the Yelay staking contract.
      * @param _SPOOL The address of the SPOOL token contract.
      */
-    constructor(address _spoolOwner, IYLAY _YLAY, ISYLAY _sYLAY, address _yelayStaking, address _SPOOL)
+    constructor(address _spoolOwner, IYLAY _YLAY, IsYLAY _sYLAY, address _yelayStaking, address _SPOOL)
         SpoolOwnable(ISpoolOwner(_spoolOwner))
     {
         YLAY = _YLAY;
@@ -73,10 +73,6 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
         for (uint256 i = 0; i < users.length; i++) {
             blocklist[users[i]] = sets[i];
         }
-    }
-
-    function migrateGlobal() external onlyOwner {
-        sYLAY.migrateGlobal();
     }
 
     /**

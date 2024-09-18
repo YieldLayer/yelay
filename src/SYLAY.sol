@@ -1,25 +1,41 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.13;
 
-// import "spool-staking-and-voting/VoSPOOL.sol";
-import "spool-staking-and-voting/VoSPOOL2.sol";
-import "src/interfaces/ISYLAY.sol";
-import "src/libraries/ConversionLib.sol";
+import "openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import "forge-std/console.sol";
+import "./sYLAYBase.sol";
+import "./libraries/ConversionLib.sol";
 
-contract SYLAY is VoSPOOL2, ISYLAY {
-    /* ========== STATE VARIABLES ========== */
+import "./interfaces/IsYLAY.sol";
+import "./interfaces/IYelayOwner.sol";
 
-    /// @notice Reference to the original VoSPOOL contract used for migration.
-    VoSPOOL2 public immutable voSPOOL;
+contract sYLAY is sYLAYBase, IsYLAY, Initializable {
+    /// @dev Reference to the original VoSPOOL contract used for migration.
+    // to avoid type conflicts we are using sYLAYBase type
+    sYLAYBase public immutable voSPOOL;
 
-    /// @notice Tracks the last global tranche index migrated from VoSPOOL.
-    uint256 private _lastGlobalIndexVoSPOOLMigrated;
+    // /// @dev migrator address
+    // address public immutable migrator;
 
-    /// @notice the last global tranche index from VoSPOOL to be migrated.
-    uint256 private _lastGlobalIndexVoSPOOL;
+    /// @custom:storage-location erc7201:yelay.storage.sYLAYMigrationStorage
+    struct sYLAYMigrationStorage {
+        /// @dev Tracks the last global tranche index migrated from VoSPOOL.
+        uint256 lastGlobalIndexVoSPOOLMigrated;
+        /// @dev the last global tranche index from VoSPOOL to be migrated.
+        uint256 lastGlobalIndexVoSPOOL;
+        /// @dev flag to allow migration
+        bool initialized;
+    }
+
+    // keccak256(abi.encode(uint256(keccak256("yelay.storage.sYLAYMigrationStorage")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant sYLAYMigrationStorageLocation =
+        0xddee74f4743e1a8cba1606768246b9b579e6a45986d386fa68f075c332fe5000;
+
+    function _getsYLAYMigrationStorageLocation() private pure returns (sYLAYMigrationStorage storage $) {
+        assembly {
+            $.slot := sYLAYMigrationStorageLocation
+        }
+    }
 
     /* ========== EVENTS ========== */
 
@@ -30,21 +46,19 @@ contract SYLAY is VoSPOOL2, ISYLAY {
     /* ========== CONSTRUCTOR ========== */
 
     /**
-     * @notice Initializes the SYLAY contract for staking YLAY tokens.
-     * @param _spoolOwner The address of the contract owner.
+     * @notice Initializes the sYLAY contract for staking YLAY tokens.
+     * @param _yelayOwner The address of the contract owner.
      * @param _voSPOOL The address of the VoSPOOL contract for migration.
      */
-    constructor(ISpoolOwner _spoolOwner, address _voSPOOL) VoSPOOL2(_spoolOwner) 
-    // 10 ** 13, // Trim size for YELAY
-    // 52 * 4, // Full power tranches count for YELAY
-    // "Yelay Staking Token",
-    // "sYLAY"
+    constructor(address _yelayOwner, address _voSPOOL)
+        // address _migrator
+        sYLAYBase(IYelayOwner(_yelayOwner))
     {
-        voSPOOL = VoSPOOL2(_voSPOOL);
+        voSPOOL = sYLAYBase(_voSPOOL);
+        // migrator = _migrator;
     }
 
-    // TODO: add initializer
-    function migrateGlobal() external {
+    function initialize() external initializer {
         firstTrancheStartTime = voSPOOL.firstTrancheStartTime();
 
         GlobalGradual memory voGlobalGradual = voSPOOL.getNotUpdatedGlobalGradual();
@@ -58,9 +72,10 @@ contract SYLAY is VoSPOOL2, ISYLAY {
             voGlobalGradual.lastUpdatedTrancheIndex
         );
 
-        _lastGlobalIndexVoSPOOL = voSPOOL.getLastFinishedTrancheIndex();
-        // TODO: cover this in test
         totalInstantPower = ConversionLib.convert(voSPOOL.totalInstantPower());
+        sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
+        $.lastGlobalIndexVoSPOOL = voSPOOL.getLastFinishedTrancheIndex();
+        $.initialized = true;
     }
 
     /* ========== MIGRATION FUNCTIONS ========== */
@@ -72,10 +87,12 @@ contract SYLAY is VoSPOOL2, ISYLAY {
      */
     // TODO: add access control
     // TODO: migrationInProgress
-    function migrateGlobalTranches(uint256 endIndex) external {
+    function migrateGlobalTranches(uint256 endIndex) external migrationInProgress {
+        sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
+        require($.initialized, "sYLAY::migrateGlobalTranches: Need initialization");
         if (_globalMigrationComplete()) return;
 
-        for (uint256 i = _lastGlobalIndexVoSPOOLMigrated; i < endIndex; i++) {
+        for (uint256 i = $.lastGlobalIndexVoSPOOLMigrated; i < endIndex; i++) {
             (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
                 voSPOOL.indexedGlobalTranches(i);
             (uint48 a, uint48 b, uint48 c, uint48 d, uint48 e) =
@@ -83,8 +100,8 @@ contract SYLAY is VoSPOOL2, ISYLAY {
             indexedGlobalTranches[i] = GlobalTranches(Tranche(a), Tranche(b), Tranche(c), Tranche(d), Tranche(e));
         }
 
-        _lastGlobalIndexVoSPOOLMigrated += endIndex * TRANCHES_PER_WORD;
-        emit GlobalTranchesMigrated(_lastGlobalIndexVoSPOOLMigrated);
+        $.lastGlobalIndexVoSPOOLMigrated += endIndex * TRANCHES_PER_WORD;
+        emit GlobalTranchesMigrated($.lastGlobalIndexVoSPOOLMigrated);
     }
 
     /**
@@ -94,7 +111,9 @@ contract SYLAY is VoSPOOL2, ISYLAY {
      */
     // TODO: add access control
     // TODO: something is wrong with migrationInProgress
-    function migrateUser(address user) external {
+    function migrateUser(address user) external migrationInProgress {
+        sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
+        require($.initialized, "sYLAY::migrateGlobalTranches: Need initialization");
         // console.log(voSPOOL.userInstantPower(user));
         // TODO: cover this in test
         userInstantPower[user] = ConversionLib.convert(voSPOOL.userInstantPower(user));
@@ -195,7 +214,8 @@ contract SYLAY is VoSPOOL2, ISYLAY {
      * @return True if the migration is still in progress, false otherwise.
      */
     function _migrationInProgressInternal() private view returns (bool) {
-        return getLastFinishedTrancheIndex() == _lastGlobalIndexVoSPOOL;
+        sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
+        return getLastFinishedTrancheIndex() == $.lastGlobalIndexVoSPOOL;
     }
 
     /**
@@ -203,7 +223,8 @@ contract SYLAY is VoSPOOL2, ISYLAY {
      * @return True if global migration is complete, false otherwise.
      */
     function _globalMigrationComplete() private view returns (bool) {
-        return (_lastGlobalIndexVoSPOOLMigrated >= _lastGlobalIndexVoSPOOL);
+        sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
+        return ($.lastGlobalIndexVoSPOOLMigrated >= $.lastGlobalIndexVoSPOOL);
     }
 
     /* ========== MODIFIERS ========== */
@@ -212,14 +233,7 @@ contract SYLAY is VoSPOOL2, ISYLAY {
      * @notice Ensures that the migration process is in progress.
      */
     modifier migrationInProgress() {
-        _migrationInProgress();
-        _;
-    }
-
-    /**
-     * @notice Checks if the migration is still in progress and reverts if it has ended.
-     */
-    function _migrationInProgress() private view {
         require(_migrationInProgressInternal(), "SYLAY: migration period ended");
+        _;
     }
 }

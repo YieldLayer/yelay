@@ -21,8 +21,8 @@ import "../src/external/spool-core/interfaces/ISpoolOwner.sol";
 
 import {YLAY} from "../src/YLAY.sol";
 import {YelayOwner, IYelayOwner} from "../src/YelayOwner.sol";
-import {SYLAY} from "../src/SYLAY.sol";
-import {SYLAYRewards} from "../src/SYLAYRewards.sol";
+import {sYLAY, IsYLAY} from "../src/sYLAY.sol";
+import {sYLAYRewards} from "../src/sYLAYRewards.sol";
 import {YelayMigrator} from "../src/YelayMigrator.sol";
 import {YelayStaking} from "../src/YelayStaking.sol";
 
@@ -46,10 +46,10 @@ contract YelayMigratorTest is Test {
     SpoolStaking spoolStaking;
     VoSpoolRewards voSpoolRewards;
 
-    YelayOwner ylayOwner;
+    YelayOwner yelayOwner;
     YLAY ylay;
-    SYLAY sYlay;
-    SYLAYRewards sYlayRewards;
+    sYLAY sYlay;
+    sYLAYRewards sYlayRewards;
     YelayMigrator yelayMigrator;
     YelayStaking yelayStaking;
 
@@ -103,25 +103,28 @@ contract YelayMigratorTest is Test {
         spoolStaking.addToken(IERC20(address(spool)), 157248000, 10_000e18);
         voSpoolRewards.updateVoSpoolRewardRate(156, 100e18);
 
-        ylayOwner = new YelayOwner();
+        yelayOwner = new YelayOwner();
 
-        address sYlayImpl = address(new SYLAY(ISpoolOwner(address(spoolOwner)), address(voSpool)));
-        sYlay = SYLAY(address(new TransparentUpgradeableProxy(sYlayImpl, address(proxyAdmin), "")));
+        address sYlayImpl = address(new sYLAY(address(yelayOwner), address(voSpool)));
+        sYlay = sYLAY(address(new TransparentUpgradeableProxy(sYlayImpl, address(proxyAdmin), "")));
 
         address ylayImpl = vm.computeCreateAddress(owner, vm.getNonce(owner));
-        // address ylayAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 1);
+        address ylayAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 1);
         address sYlayRewardsImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 2);
         address sYlayRewardsAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 3);
         address yelayMigratorImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 4);
         address yelayMigratorAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 5);
         address yelayStakingImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 6);
         address yelayStakingAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 7);
+        // address sYlayImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 8);
+        // address sYlayAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 9);
 
-        new YLAY(ylayOwner, YelayMigrator(yelayMigratorAddr));
+        new YLAY(yelayOwner, yelayMigratorAddr);
         ylay = YLAY(address(new ERC1967Proxy(ylayImpl, "")));
+        assert(address(ylay) == ylayAddr);
 
-        new SYLAYRewards(address(spoolOwner), address(sYlay), yelayStakingAddr);
-        sYlayRewards = SYLAYRewards(address(new TransparentUpgradeableProxy(sYlayRewardsImpl, address(proxyAdmin), "")));
+        new sYLAYRewards(address(spoolOwner), address(sYlay), yelayStakingAddr);
+        sYlayRewards = sYLAYRewards(address(new TransparentUpgradeableProxy(sYlayRewardsImpl, address(proxyAdmin), "")));
         assert(address(sYlayRewards) == sYlayRewardsAddr);
 
         new YelayMigrator(address(spoolOwner), ylay, sYlay, yelayStakingAddr, address(spool));
@@ -147,6 +150,12 @@ contract YelayMigratorTest is Test {
         yelayStaking = YelayStaking(address(new TransparentUpgradeableProxy(yelayStakingImpl, address(proxyAdmin), "")));
         assert(address(yelayStaking) == yelayStakingAddr);
         assert(address(yelayStaking.migrator()) == address(yelayMigrator));
+
+        // // new sYLAY(address(yelayOwner), address(voSpool), yelayMigratorAddr);
+        // new sYLAY(address(yelayOwner), address(voSpool));
+        // sYlay = sYLAY(address(new TransparentUpgradeableProxy(sYlayImpl, address(proxyAdmin), "")));
+        // assert(address(sYlay) == sYlayAddr);
+        // assert(sYlay.migrator() == yelayMigratorAddr);
 
         sYlay.setGradualMinter(address(yelayStaking), true);
         ylay.initialize();
@@ -229,7 +238,7 @@ contract YelayMigratorTest is Test {
         {
             vm.assertNotEq(sYlay.getTrancheIndex(block.timestamp), 158);
             vm.startPrank(owner);
-            yelayMigrator.migrateGlobal();
+            sYlay.initialize();
             yelayMigrator.migrateGlobalTranches(voSpool.getCurrentTrancheIndex());
             vm.stopPrank();
             vm.assertEq(sYlay.getTrancheIndex(block.timestamp), 158);
@@ -336,11 +345,11 @@ contract YelayMigratorTest is Test {
         // console.log("sYLAY indexedGlobalTranches");
         // {
         //     (
-        //         SYLAY.Tranche memory zero,
-        //         SYLAY.Tranche memory one,
-        //         SYLAY.Tranche memory two,
-        //         SYLAY.Tranche memory three,
-        //         SYLAY.Tranche memory four
+        //         sYLAY.Tranche memory zero,
+        //         sYLAY.Tranche memory one,
+        //         sYLAY.Tranche memory two,
+        //         sYLAY.Tranche memory three,
+        //         sYLAY.Tranche memory four
         //     ) = sYlay.indexedGlobalTranches(0);
         //     console.log("0 index");
         //     console.log(zero.amount);
@@ -351,11 +360,11 @@ contract YelayMigratorTest is Test {
         // }
         // {
         //     (
-        //         SYLAY.Tranche memory zero,
-        //         SYLAY.Tranche memory one,
-        //         SYLAY.Tranche memory two,
-        //         SYLAY.Tranche memory three,
-        //         SYLAY.Tranche memory four
+        //         sYLAY.Tranche memory zero,
+        //         sYLAY.Tranche memory one,
+        //         sYLAY.Tranche memory two,
+        //         sYLAY.Tranche memory three,
+        //         sYLAY.Tranche memory four
         //     ) = sYlay.indexedGlobalTranches(1);
         //     console.log("1 index");
         //     console.log(zero.amount);
@@ -366,11 +375,11 @@ contract YelayMigratorTest is Test {
         // }
         // {
         //     (
-        //         SYLAY.Tranche memory zero,
-        //         SYLAY.Tranche memory one,
-        //         SYLAY.Tranche memory two,
-        //         SYLAY.Tranche memory three,
-        //         SYLAY.Tranche memory four
+        //         sYLAY.Tranche memory zero,
+        //         sYLAY.Tranche memory one,
+        //         sYLAY.Tranche memory two,
+        //         sYLAY.Tranche memory three,
+        //         sYLAY.Tranche memory four
         //     ) = sYlay.indexedGlobalTranches(2);
         //     console.log("2 index");
         //     console.log(zero.amount);
