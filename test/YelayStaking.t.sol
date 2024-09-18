@@ -80,8 +80,7 @@ contract YelayStakingTest is Test, Utilities {
         assert(address(yLAY) == precomputedYLAYAddress);
 
         // Step 4: Deploy sYlay at precomputedSYLAYAddress
-        // sYlay = new sYLAY(address(yelayOwner), address(voSPOOL), precomputedMigratorAddress);
-        sYlay = new sYLAY(address(yelayOwner), address(voSPOOL));
+        sYlay = new sYLAY(address(yelayOwner), address(voSPOOL), precomputedMigratorAddress);
         assert(address(sYlay) == precomputedSYLAYAddress);
 
         // Step 5: Deploy RewardDistributor at precomputedRewardDistributorAddress

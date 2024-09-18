@@ -14,8 +14,8 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
     // to avoid type conflicts we are using sYLAYBase type
     sYLAYBase public immutable voSPOOL;
 
-    // /// @dev migrator address
-    // address public immutable migrator;
+    /// @dev migrator address
+    address public immutable migrator;
 
     /// @custom:storage-location erc7201:yelay.storage.sYLAYMigrationStorage
     struct sYLAYMigrationStorage {
@@ -50,22 +50,16 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
      * @param _yelayOwner The address of the contract owner.
      * @param _voSPOOL The address of the VoSPOOL contract for migration.
      */
-    constructor(address _yelayOwner, address _voSPOOL)
-        // address _migrator
-        sYLAYBase(IYelayOwner(_yelayOwner))
-    {
+    constructor(address _yelayOwner, address _voSPOOL, address _migrator) sYLAYBase(IYelayOwner(_yelayOwner)) {
         voSPOOL = sYLAYBase(_voSPOOL);
-        // migrator = _migrator;
+        migrator = _migrator;
     }
 
     function initialize() external initializer {
         firstTrancheStartTime = voSPOOL.firstTrancheStartTime();
 
         GlobalGradual memory voGlobalGradual = voSPOOL.getNotUpdatedGlobalGradual();
-        // GlobalGradual memory voGlobalGradual = voSPOOL.getGlobalGradual();
         _globalGradual = GlobalGradual(
-            // TODO: is it ok to transfer it as well?
-            // 0,
             ConversionLib.convertAmount(voGlobalGradual.totalMaturedVotingPower),
             ConversionLib.convertAmount(voGlobalGradual.totalMaturingAmount),
             ConversionLib.convertPower(voGlobalGradual.totalRawUnmaturedVotingPower),
@@ -85,11 +79,9 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
      * @dev Converts the VoSPOOL tranche data into the format used by SYLAY.
      * @param endIndex The tranche index to which global tranches will be migrated.
      */
-    // TODO: add access control
-    // TODO: migrationInProgress
-    function migrateGlobalTranches(uint256 endIndex) external migrationInProgress {
+    function migrateGlobalTranches(uint256 endIndex) external migrationInProgress onlyMigrator {
         sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
-        require($.initialized, "sYLAY::migrateGlobalTranches: Need initialization");
+        _whenInitialized($);
         if (_globalMigrationComplete()) return;
 
         for (uint256 i = $.lastGlobalIndexVoSPOOLMigrated; i < endIndex; i++) {
@@ -109,12 +101,9 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
      * @dev Transfers user tranche data and power from VoSPOOL to SYLAY.
      * @param user The address of the user being migrated.
      */
-    // TODO: add access control
-    // TODO: something is wrong with migrationInProgress
-    function migrateUser(address user) external migrationInProgress {
+    function migrateUser(address user) external migrationInProgress onlyMigrator {
         sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
-        require($.initialized, "sYLAY::migrateGlobalTranches: Need initialization");
-        // console.log(voSPOOL.userInstantPower(user));
+        _whenInitialized($);
         // TODO: cover this in test
         userInstantPower[user] = ConversionLib.convert(voSPOOL.userInstantPower(user));
         UserGradual memory userGradual = voSPOOL.getNotUpdatedUserGradual(user);
@@ -122,9 +111,7 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
 
         // Store user gradual information
         _userGraduals[user] = UserGradual(
-            // TODO: do we need this?
             ConversionLib.convertAmount(userGradual.maturedVotingPower),
-            // 0,
             ConversionLib.convertAmount(userGradual.maturingAmount),
             ConversionLib.convertPower(userGradual.rawUnmaturedVotingPower),
             userGradual.oldestTranchePosition,
@@ -227,6 +214,10 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
         return ($.lastGlobalIndexVoSPOOLMigrated >= $.lastGlobalIndexVoSPOOL);
     }
 
+    function _whenInitialized(sYLAYMigrationStorage storage $) private view {
+        require($.initialized, "sYLAY: Not initialized");
+    }
+
     /* ========== MODIFIERS ========== */
 
     /**
@@ -234,6 +225,14 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
      */
     modifier migrationInProgress() {
         require(_migrationInProgressInternal(), "SYLAY: migration period ended");
+        _;
+    }
+
+    /**
+     * @notice Ensures that the function can only be called by the migrator.
+     */
+    modifier onlyMigrator() {
+        require(msg.sender == migrator, "sYLAY: caller not migrator");
         _;
     }
 }

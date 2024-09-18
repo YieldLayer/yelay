@@ -105,9 +105,6 @@ contract YelayMigratorTest is Test {
 
         yelayOwner = new YelayOwner();
 
-        address sYlayImpl = address(new sYLAY(address(yelayOwner), address(voSpool)));
-        sYlay = sYLAY(address(new TransparentUpgradeableProxy(sYlayImpl, address(proxyAdmin), "")));
-
         address ylayImpl = vm.computeCreateAddress(owner, vm.getNonce(owner));
         address ylayAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 1);
         address sYlayRewardsImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 2);
@@ -116,18 +113,18 @@ contract YelayMigratorTest is Test {
         address yelayMigratorAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 5);
         address yelayStakingImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 6);
         address yelayStakingAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 7);
-        // address sYlayImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 8);
-        // address sYlayAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 9);
+        address sYlayImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 8);
+        address sYlayAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 9);
 
         new YLAY(yelayOwner, yelayMigratorAddr);
         ylay = YLAY(address(new ERC1967Proxy(ylayImpl, "")));
         assert(address(ylay) == ylayAddr);
 
-        new sYLAYRewards(address(spoolOwner), address(sYlay), yelayStakingAddr);
+        new sYLAYRewards(address(spoolOwner), address(sYlayAddr), yelayStakingAddr);
         sYlayRewards = sYLAYRewards(address(new TransparentUpgradeableProxy(sYlayRewardsImpl, address(proxyAdmin), "")));
         assert(address(sYlayRewards) == sYlayRewardsAddr);
 
-        new YelayMigrator(address(spoolOwner), ylay, sYlay, yelayStakingAddr, address(spool));
+        new YelayMigrator(address(spoolOwner), ylay, IsYLAY(sYlayAddr), yelayStakingAddr, address(spool));
         yelayMigrator =
             YelayMigrator(address(new TransparentUpgradeableProxy(yelayMigratorImpl, address(proxyAdmin), "")));
         assert(
@@ -140,7 +137,7 @@ contract YelayMigratorTest is Test {
         new YelayStaking(
             address(spoolOwner),
             address(ylay),
-            address(sYlay),
+            address(sYlayAddr),
             address(sYlayRewards),
             // TODO: add RewardDistributor
             address(0x11),
@@ -151,11 +148,10 @@ contract YelayMigratorTest is Test {
         assert(address(yelayStaking) == yelayStakingAddr);
         assert(address(yelayStaking.migrator()) == address(yelayMigrator));
 
-        // // new sYLAY(address(yelayOwner), address(voSpool), yelayMigratorAddr);
-        // new sYLAY(address(yelayOwner), address(voSpool));
-        // sYlay = sYLAY(address(new TransparentUpgradeableProxy(sYlayImpl, address(proxyAdmin), "")));
-        // assert(address(sYlay) == sYlayAddr);
-        // assert(sYlay.migrator() == yelayMigratorAddr);
+        new sYLAY(address(yelayOwner), address(voSpool), yelayMigratorAddr);
+        sYlay = sYLAY(address(new TransparentUpgradeableProxy(sYlayImpl, address(proxyAdmin), "")));
+        assert(address(sYlay) == sYlayAddr);
+        assert(sYlay.migrator() == yelayMigratorAddr);
 
         sYlay.setGradualMinter(address(yelayStaking), true);
         ylay.initialize();

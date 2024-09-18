@@ -80,8 +80,7 @@ contract SYLAYTest is Test, Utilities {
         assert(address(yLAY) == precomputedYLAYAddress);
 
         // Step 4: Deploy sYLAY at precomputedSYLAYAddress
-        // sYlay = new sYLAY(address(yelayOwner), address(voSPOOL), precomputedMigratorAddress);
-        sYlay = new sYLAY(address(yelayOwner), address(voSPOOL));
+        sYlay = new sYLAY(address(yelayOwner), address(voSPOOL), address(this));
         assert(address(sYlay) == precomputedSYLAYAddress);
 
         // Step 5: Deploy RewardDistributor at precomputedRewardDistributorAddress
@@ -121,7 +120,6 @@ contract SYLAYTest is Test, Utilities {
         uint256 numIndexes = (voSPOOL.getCurrentTrancheIndex() / 5) + 1;
         console.log("num indexes: ", numIndexes);
         uint256 _gasBefore = gasleft();
-        vm.prank(gradualMinter);
         sYlay.migrateGlobalTranches(numIndexes);
         console.log("fully migrated: ", sYlay.migrationComplete());
         uint256 _gasUsed = _gasBefore - gasleft();
