@@ -6,8 +6,6 @@ import "openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "spool-core/SpoolOwnable.sol";
 import "./interfaces/IVoSPOOL.sol";
 
-import "forge-std/console.sol";
-
 /**
  * @title Spool DAO Voting Token Implementation
  *
@@ -51,7 +49,7 @@ import "forge-std/console.sol";
  *      - RESTRICTION FUNCTIONS
  *      - MODIFIERS
  */
-contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
+contract VoSPOOL2 is SpoolOwnable, IVoSPOOL, IERC20Metadata {
     /* ========== STRUCTS ========== */
 
     /**
@@ -110,22 +108,22 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 
     /// @notice trim size value of the mint amount
     /// @dev we trim gradual mint amount by `TRIM_SIZE`, so it takes less storage
-    uint256 internal immutable TRIM_SIZE;
+    uint256 internal constant TRIM_SIZE = 10 ** 13;
     /// @notice number of tranche amounts stored in one 256bit word
     uint256 internal constant TRANCHES_PER_WORD = 5;
 
     /// @notice duration of one tranche
     uint256 public constant TRANCHE_TIME = 1 weeks;
     /// @notice amount of tranches to mature to full power
-    uint256 public immutable FULL_POWER_TRANCHES_COUNT;
+    uint256 public constant FULL_POWER_TRANCHES_COUNT = 52 * 4;
     /// @notice time until gradual power is fully-matured
     /// @dev full power time is 156 weeks (approximately 3 years)
-    uint256 public immutable FULL_POWER_TIME;
+    uint256 public constant FULL_POWER_TIME = TRANCHE_TIME * FULL_POWER_TRANCHES_COUNT;
 
     /// @notice Token name full name
-    string public name;
+    string public constant name = "Staked Yelay";
     /// @notice Token symbol
-    string public symbol;
+    string public constant symbol = "sYLAY";
     /// @notice Token decimals
     uint8 public constant decimals = 18;
 
@@ -172,24 +170,8 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * - first tranche time must must be less than full tranche time in the future
      *
      * @param _spoolOwner address of spool owner contract
-     * @param _trimSize trim size to reduce minting amount
-     * @param _fullPowerTranchesCount number of tranches to mature to full power
-     * @param _name token name
-     * @param _symbol token symbol
      */
-    constructor(
-        ISpoolOwner _spoolOwner,
-        uint256 _trimSize,
-        uint256 _fullPowerTranchesCount,
-        string memory _name,
-        string memory _symbol
-    ) SpoolOwnable(_spoolOwner) {
-        TRIM_SIZE = _trimSize;
-        FULL_POWER_TRANCHES_COUNT = _fullPowerTranchesCount;
-        FULL_POWER_TIME = TRANCHE_TIME * _fullPowerTranchesCount;
-        name = _name;
-        symbol = _symbol;
-    }
+    constructor(ISpoolOwner _spoolOwner) SpoolOwnable(_spoolOwner) {}
 
     /* ========== IERC20 FUNCTIONS ========== */
 
@@ -583,7 +565,6 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 
         // apply changes to storage
         _userGraduals[from] = _userGradual;
-        _globalGradual = global;
 
         emit GradualBurned(from, amount, burnAll);
 
@@ -705,7 +686,6 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 
                 // remove new fully-matured power from maturing amount
                 _updateTotalMaturingAmount(global, newMaturedVotingPower);
-
                 // add new fully-matured voting power
                 global.totalMaturedVotingPower += newMaturedVotingPower;
             }
@@ -766,17 +746,14 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 
         // 1. if user already updated in this tranche index, skip
         if (_userGradual.lastUpdatedTrancheIndex == lastFinishedTrancheIndex) {
-            // console.log("1.");
             return (_userGradual, false);
         }
 
         // update user if it has maturing power
         if (_hasTranches(_userGradual)) {
             // 2. update fully-matured tranches
-            // console.log("2.");
             uint16 lastMaturedIndex = _getLastMaturedIndex();
             if (lastMaturedIndex > 0) {
-                // console.log("2.a");
                 UserTranche memory oldestTranche = _getUserTranche(user, _userGradual.oldestTranchePosition);
                 // update all fully-matured user tranches
                 while (_hasTranches(_userGradual) && oldestTranche.index <= lastMaturedIndex) {
@@ -789,7 +766,6 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
 
             // 3. update still maturing tranches
             if (_isMaturing(_userGradual, lastFinishedTrancheIndex)) {
-                // console.log("3.");
                 // get number of passed indexes
                 uint56 indexesPassed = lastFinishedTrancheIndex - _userGradual.lastUpdatedTrancheIndex;
 
@@ -799,7 +775,6 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
                 _userGradual.lastUpdatedTrancheIndex = lastFinishedTrancheIndex;
             }
         }
-        // console.log("exit");
 
         // update user last updated tranche index
         _userGradual.lastUpdatedTrancheIndex = lastFinishedTrancheIndex;
@@ -817,42 +792,29 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      */
     function _matureOldestUsersTranche(UserGradual memory _userGradual, UserTranche memory oldestTranche)
         private
-        view
+        pure
     {
-        // console.log("before _getFullyMaturedAtFinishedIndex");
         uint16 fullyMaturedFinishedIndex = _getFullyMaturedAtFinishedIndex(oldestTranche.index);
-        // console.log("after _getFullyMaturedAtFinishedIndex");
 
         uint48 newMaturedVotingPower = oldestTranche.amount;
 
         // add new matured voting power
         // calculate number of passed indexes between last update until fully matured index
-        // console.log("indexesPassed");
         uint56 indexesPassed = fullyMaturedFinishedIndex - _userGradual.lastUpdatedTrancheIndex;
-        // console.log("_userGradual.rawUnmaturedVotingPower");
         _userGradual.rawUnmaturedVotingPower += _userGradual.maturingAmount * indexesPassed;
 
         // update new fully-matured voting power
-        // console.log("newMaturedAsRawUnmatured");
         uint56 newMaturedAsRawUnmatured = _getMaturedAsRawUnmaturedAmount(newMaturedVotingPower);
 
         // update user gradual values in respect of new fully-matured amount
         // remove new fully matured voting power from non matured raw one
-        // console.log("_userGradual.rawUnmaturedVotingPower");
-        // console.log(_userGradual.rawUnmaturedVotingPower);
-        // console.log(newMaturedAsRawUnmatured);
-        // _userGradual.rawUnmaturedVotingPower -= newMaturedAsRawUnmatured;
         _updateRawUnmaturedVotingPower(_userGradual, newMaturedAsRawUnmatured);
         // add new fully-matured voting power
-        // console.log("_userGradual.maturedVotingPower");
         _userGradual.maturedVotingPower += newMaturedVotingPower;
         // remove new fully-matured power from maturing amount
-        // console.log("_userGradual.maturingAmount");
         _updateMaturingAmount(_userGradual, newMaturedVotingPower);
-        // _userGradual.maturingAmount -= newMaturedVotingPower;
 
         // add next tranche as oldest
-        // console.log("_setNextOldestUserTranchePosition");
         _setNextOldestUserTranchePosition(_userGradual);
 
         // update last updated index until fully matured index
@@ -868,7 +830,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      *
      * @param index index from which to derive fully matured finished index
      */
-    function _getFullyMaturedAtFinishedIndex(uint256 index) private view returns (uint16) {
+    function _getFullyMaturedAtFinishedIndex(uint256 index) private pure returns (uint16) {
         return uint16(index + FULL_POWER_TRANCHES_COUNT - 1);
     }
 
@@ -903,7 +865,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * @param global global gradual struct
      * @return totalGradualVotingPower total gradual voting power (fully-matured + maturing)
      */
-    function _getTotalGradualVotingPower(GlobalGradual memory global) private view returns (uint256) {
+    function _getTotalGradualVotingPower(GlobalGradual memory global) private pure returns (uint256) {
         return _untrim(global.totalMaturedVotingPower)
             + _getMaturingVotingPowerFromRaw(_untrim(global.totalRawUnmaturedVotingPower));
     }
@@ -983,7 +945,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * @param _userGradual user gradual struct
      * @return userGradualVotingPower user gradual voting power (fully-matured + maturing)
      */
-    function _getUserGradualVotingPower(UserGradual memory _userGradual) private view returns (uint256) {
+    function _getUserGradualVotingPower(UserGradual memory _userGradual) private pure returns (uint256) {
         return _untrim(_userGradual.maturedVotingPower)
             + _getMaturingVotingPowerFromRaw(_untrim(_userGradual.rawUnmaturedVotingPower));
     }
@@ -1049,7 +1011,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * @param amount amount to trim
      * @return trimmedAmount amount divided by `TRIM_SIZE`
      */
-    function _trim(uint256 amount) private view returns (uint48) {
+    function _trim(uint256 amount) private pure returns (uint48) {
         return uint48(amount / TRIM_SIZE);
     }
 
@@ -1059,7 +1021,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * @param amount amount to trim
      * @return trimmedAmount amount divided by `TRIM_SIZE`, rounded up
      */
-    function _trimRoundUp(uint256 amount) private view returns (uint48 trimmedAmount) {
+    function _trimRoundUp(uint256 amount) private pure returns (uint48 trimmedAmount) {
         trimmedAmount = _trim(amount);
         if (_untrim(trimmedAmount) < amount) {
             unchecked {
@@ -1074,7 +1036,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * @param trimmedAmount amount previously trimemd
      * @return untrimmedAmount untrimmed amount
      */
-    function _untrim(uint256 trimmedAmount) private view returns (uint256) {
+    function _untrim(uint256 trimmedAmount) private pure returns (uint256) {
         unchecked {
             return trimmedAmount * TRIM_SIZE;
         }
@@ -1086,7 +1048,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * @param rawMaturingVotingPower raw maturing voting power amount
      * @return maturingVotingPower actual maturing power amount
      */
-    function _getMaturingVotingPowerFromRaw(uint256 rawMaturingVotingPower) private view returns (uint256) {
+    function _getMaturingVotingPowerFromRaw(uint256 rawMaturingVotingPower) private pure returns (uint256) {
         return rawMaturingVotingPower / FULL_POWER_TRANCHES_COUNT;
     }
 
@@ -1097,7 +1059,7 @@ contract VoSPOOL is SpoolOwnable, IVoSPOOL, IERC20Metadata {
      * @param amount matured amount
      * @return asRawUnmatured `amount` multiplied by `FULL_POWER_TRANCHES_COUNT` (raw unmatured amount)
      */
-    function _getMaturedAsRawUnmaturedAmount(uint48 amount) private view returns (uint56) {
+    function _getMaturedAsRawUnmaturedAmount(uint48 amount) private pure returns (uint56) {
         unchecked {
             return uint56(amount * FULL_POWER_TRANCHES_COUNT);
         }

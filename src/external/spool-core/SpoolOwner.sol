@@ -16,13 +16,13 @@ contract SpoolOwner is ISpoolOwner, Ownable {
     /* ========== VIEWS ========== */
 
     /**
-    * @notice checks if input is the spool owner contract.
-    * 
-    * @param user the address to check
-    * 
-    * @return isOwner returns true if user is the Spool owner, else returns false.
-    */
-    function isSpoolOwner(address user) external view override returns(bool isOwner) {
+     * @notice checks if input is the spool owner contract.
+     *
+     * @param user the address to check
+     *
+     * @return isOwner returns true if user is the Spool owner, else returns false.
+     */
+    function isSpoolOwner(address user) external view override returns (bool isOwner) {
         if (user == owner()) {
             isOwner = true;
         }
@@ -31,12 +31,12 @@ contract SpoolOwner is ISpoolOwner, Ownable {
     /* ========== RESTRICTED FUNCTIONS ========== */
 
     /**
-    * @notice removed renounceOwnership function
-    * 
-    * @dev 
-    * overrides OpenZeppelin renounceOwnership() function and reverts in all cases,
-    * as Spool ownership should never be renounced.
-    */
+     * @notice removed renounceOwnership function
+     *
+     * @dev
+     * overrides OpenZeppelin renounceOwnership() function and reverts in all cases,
+     * as Spool ownership should never be renounced.
+     */
     function renounceOwnership() public view override onlyOwner {
         revert("SpoolOwner::renounceOwnership: Cannot renounce Spool ownership");
     }

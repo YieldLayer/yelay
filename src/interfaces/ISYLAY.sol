@@ -8,4 +8,5 @@ interface ISYLAY is IVoSPOOL {
     function transferUser(address from, address to) external;
     function migrateUser(address user) external;
     function migrateGlobalTranches(uint256 endIndex) external;
+    function migrateGlobal() external;
 }

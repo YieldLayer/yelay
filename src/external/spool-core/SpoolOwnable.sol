@@ -6,17 +6,16 @@ import "./interfaces/ISpoolOwner.sol";
 
 abstract contract SpoolOwnable {
     ISpoolOwner internal immutable spoolOwner;
-    
+
     constructor(ISpoolOwner _spoolOwner) {
         require(
-            address(_spoolOwner) != address(0),
-            "SpoolOwnable::constructor: Spool owner contract address cannot be 0"
+            address(_spoolOwner) != address(0), "SpoolOwnable::constructor: Spool owner contract address cannot be 0"
         );
 
         spoolOwner = _spoolOwner;
     }
 
-    function isSpoolOwner() internal view returns(bool) {
+    function isSpoolOwner() internal view returns (bool) {
         return spoolOwner.isSpoolOwner(msg.sender);
     }
 

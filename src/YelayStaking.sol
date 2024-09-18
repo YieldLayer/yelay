@@ -2,18 +2,22 @@
 
 pragma solidity 0.8.13;
 
-import "src/external/spool-staking-and-voting/SpoolStaking.sol";
+// import "src/external/spool-staking-and-voting/SpoolStaking.sol";
 import "src/interfaces/ISYLAY.sol";
 import "src/libraries/ConversionLib.sol";
 
-contract YelayStaking is SpoolStaking {
+import "forge-std/console.sol";
+
+import {SpoolStaking2, IERC20, RewardConfiguration} from "./upgrade/SpoolStaking2.sol";
+
+contract YelayStaking is SpoolStaking2 {
     /* ========== STATE VARIABLES ========== */
 
     /// @notice The interface for staked YLAY (sYLAY) tokens.
     ISYLAY public immutable sYLAY;
 
     /// @notice The SpoolStaking contract, used for migration purposes.
-    SpoolStaking public immutable spoolStaking;
+    SpoolStaking2 public immutable spoolStaking;
 
     /// @notice The total amount of SPOOL tokens that have been migrated to YLAY staking.
     uint256 private _totalStakedSPOOLMigrated;
@@ -22,7 +26,7 @@ contract YelayStaking is SpoolStaking {
     IERC20 public immutable SPOOL;
 
     /// @notice The address of the migrator contract responsible for migration.
-    address public migrator;
+    address public immutable migrator;
 
     /* ========== CONSTRUCTOR ========== */
 
@@ -36,23 +40,18 @@ contract YelayStaking is SpoolStaking {
      * @param _migrator The address of the contract responsible for migration.
      */
     constructor(
-        ISpoolOwner _spoolOwner,
-        IERC20 _YLAY,
-        ISYLAY _sYLAY,
-        IRewardDistributor _rewardDistributor,
-        SpoolStaking _spoolStaking,
+        address _spoolOwner,
+        address _YLAY,
+        address _sYLAY,
+        address _sYLAYRewards,
+        address _rewardDistributor,
+        address _spoolStaking,
         address _migrator
-    ) 
-    SpoolStaking(
-        _YLAY,
-        IVoSPOOL(_sYLAY),
-        _rewardDistributor,
-        _spoolOwner
-    ) {
-       sYLAY = _sYLAY;
-       spoolStaking = _spoolStaking;
-       SPOOL = spoolStaking.stakingToken();
-       migrator = _migrator;
+    ) SpoolStaking2(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _spoolOwner) {
+        sYLAY = ISYLAY(_sYLAY);
+        spoolStaking = SpoolStaking2(_spoolStaking);
+        SPOOL = spoolStaking.stakingToken();
+        migrator = _migrator;
     }
 
     /* ========== MIGRATION FUNCTIONS ========== */
@@ -65,12 +64,9 @@ contract YelayStaking is SpoolStaking {
      * @return yelayStaked The amount of YLAY tokens staked after migration.
      * @return yelayRewards The amount of YLAY rewards migrated from SPOOL rewards.
      */
-    function migrateUser(address user) 
-        external 
-        onlyMigrator 
-        returns (uint256 yelayStaked, uint256 yelayRewards) 
-    {
+    function migrateUser(address user) external onlyMigrator returns (uint256 yelayStaked, uint256 yelayRewards) {
         uint256 spoolStaked = spoolStaking.balances(user);
+        // console.log(spoolStaked);
         yelayStaked = ConversionLib.convert(spoolStaked);
 
         unchecked {
@@ -82,7 +78,12 @@ contract YelayStaking is SpoolStaking {
         // Handle staking rewards migration.
         // Note: voSPOOL rewards are not migrated. Upgrades to SpoolStaking/voSPOOLRewards are needed for full reward migration.
         uint256 userSpoolRewards = spoolStaking.earned(SPOOL, user);
-        yelayRewards = ConversionLib.convert(userSpoolRewards);
+        uint256 userVoSpoolRewards = spoolStaking.getUpdatedVoSpoolRewardAmount(user);
+        // console.log("userSpoolRewards");
+        // console.log(userSpoolRewards);
+        // console.log("userVoSpoolRewards");
+        // console.log(userVoSpoolRewards);
+        yelayRewards = ConversionLib.convert(userSpoolRewards + userVoSpoolRewards);
     }
 
     /* ========== TRANSFER FUNCTIONS ========== */
@@ -92,11 +93,7 @@ contract YelayStaking is SpoolStaking {
      * @dev This function is non-reentrant and updates rewards before transferring.
      * @param to The address of the recipient to whom the staking data is transferred.
      */
-    function transferUser(address to) 
-        external 
-        nonReentrant 
-        updateRewards(msg.sender) 
-    {
+    function transferUser(address to) external nonReentrant updateRewards(msg.sender) {
         balances[to] = balances[msg.sender];
         canStakeFor[to] = canStakeFor[msg.sender];
         stakedBy[to] = stakedBy[msg.sender];
@@ -126,9 +123,7 @@ contract YelayStaking is SpoolStaking {
      * @param account The address of the user whose balance is being migrated.
      * @param amount The amount of YLAY tokens being migrated.
      */
-    function _migrateUser(address account, uint256 amount) 
-        private 
-    {
+    function _migrateUser(address account, uint256 amount) private {
         unchecked {
             totalStaked = totalStaked += amount;
         }
@@ -144,11 +139,7 @@ contract YelayStaking is SpoolStaking {
      * @dev The migration is considered complete when all staked SPOOL tokens have been migrated to YLAY.
      * @return True if the migration is complete, false otherwise.
      */
-    function migrationComplete() 
-        external 
-        view 
-        returns (bool) 
-    {
+    function migrationComplete() external view returns (bool) {
         return _totalStakedSPOOLMigrated == spoolStaking.totalStaked();
     }
 

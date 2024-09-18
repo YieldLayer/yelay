@@ -5,24 +5,16 @@ pragma solidity 0.8.13;
 import "openzeppelin-contracts/token/ERC20/IERC20.sol";
 
 interface IRewardDistributor {
-	/* ========== FUNCTIONS ========== */
+    /* ========== FUNCTIONS ========== */
 
-	function payRewards(
-		address account,
-		IERC20[] memory tokens,
-		uint256[] memory amounts
-	) external;
+    function payRewards(address account, IERC20[] memory tokens, uint256[] memory amounts) external;
 
-	function payReward(
-		address account,
-		IERC20 token,
-		uint256 amount
-	) external;
+    function payReward(address account, IERC20 token, uint256 amount) external;
 
-	/* ========== EVENTS ========== */
+    /* ========== EVENTS ========== */
 
-	event RewardPaid(IERC20 token, address indexed account, uint256 amount);
-	event RewardRetrieved(IERC20 token, address indexed account, uint256 amount);
-	event DistributorUpdated(address indexed user, bool set);
-	event PauserUpdated(address indexed user, bool set);
+    event RewardPaid(IERC20 token, address indexed account, uint256 amount);
+    event RewardRetrieved(IERC20 token, address indexed account, uint256 amount);
+    event DistributorUpdated(address indexed user, bool set);
+    event PauserUpdated(address indexed user, bool set);
 }

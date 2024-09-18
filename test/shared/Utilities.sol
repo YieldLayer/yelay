@@ -14,9 +14,9 @@ contract Utilities {
         return (trim(amount) * TRIM_SIZE * tranches) / FULL_POWER_TRANCHES_COUNT;
     }
 
-	function trim(uint256 amount) public pure returns (uint48) {
-		return uint48(amount / TRIM_SIZE);
-	}
+    function trim(uint256 amount) public pure returns (uint48) {
+        return uint48(amount / TRIM_SIZE);
+    }
 
     function getChainTimeInTwoDays() public view returns (uint256) {
         return block.timestamp + 2 days;

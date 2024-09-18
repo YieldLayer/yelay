@@ -3,3 +3,4 @@ openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contr
 openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/
 spool-staking-and-voting/=src/external/spool-staking-and-voting/
 spool-core/=src/external/spool-core/
+spool/=lib/spool-staking-and-voting/contracts/

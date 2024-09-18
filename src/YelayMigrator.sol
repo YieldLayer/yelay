@@ -11,15 +11,14 @@ import "./interfaces/IYelayStaking.sol";
 import "./interfaces/IYLAY.sol";
 import "src/libraries/ConversionLib.sol";
 
-
 contract YelayMigrator is SpoolOwnable, IYelayMigrator {
     /* ========== STATE VARIABLES ========== */
 
     /// @notice Pausable and ownable ERC20 interface for the SPOOL token.
-    IERC20PausableOwnable public SPOOL;
+    IERC20PausableOwnable public immutable SPOOL;
 
     /// @notice Interface for YLAY token.
-    IYLAY public YLAY;
+    IYLAY public immutable YLAY;
 
     /// @notice Immutable interface for Yelay staking contract.
     IYelayStaking public immutable yelayStaking;
@@ -54,19 +53,13 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
      * @param _yelayStaking The address of the Yelay staking contract.
      * @param _SPOOL The address of the SPOOL token contract.
      */
-    constructor(
-        ISpoolOwner _spoolOwner,
-        IYLAY _YLAY,
-        ISYLAY _sYLAY,
-        IYelayStaking _yelayStaking,
-        IERC20PausableOwnable _SPOOL
-    ) 
-    SpoolOwnable(_spoolOwner) 
+    constructor(address _spoolOwner, IYLAY _YLAY, ISYLAY _sYLAY, address _yelayStaking, address _SPOOL)
+        SpoolOwnable(ISpoolOwner(_spoolOwner))
     {
         YLAY = _YLAY;
         sYLAY = _sYLAY;
-        yelayStaking = _yelayStaking;
-        SPOOL = _SPOOL;
+        yelayStaking = IYelayStaking(_yelayStaking);
+        SPOOL = IERC20PausableOwnable(_SPOOL);
     }
 
     /* ========== MUTATIVE FUNCTIONS ========== */
@@ -82,6 +75,10 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
         }
     }
 
+    function migrateGlobal() external onlyOwner {
+        sYLAY.migrateGlobal();
+    }
+
     /**
      * @notice Migrate global tranches for sYLAY up to the given endIndex.
      * @param endIndex The index up to which tranches should be migrated.
@@ -92,7 +89,7 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
 
     /**
      * @notice Migrate the SPOOL token balance of claimants to YLAY tokens.
-     * @dev This function checks if the claimants are blocklisted or have already migrated. 
+     * @dev This function checks if the claimants are blocklisted or have already migrated.
      * It calculates the YLAY amount using conversion and marks the claimant as migrated.
      * @param claimants An array of addresses of the claimants whose balances will be migrated.
      */
@@ -123,16 +120,16 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
         YLAY.claim(address(yelayStaking), yelayToStake);
     }
 
-    /**
-     * @notice Allows a single user to migrate their staked SPOOL to Yelay staking.
-     */
-    function migrateStake() external onlyOwner spoolDisabled {
-        uint256 yelayToStake = _migrateStake(msg.sender);
+    // /**
+    //  * @notice Allows a single user to migrate their staked SPOOL to Yelay staking.
+    //  */
+    // function migrateStake() external onlyOwner spoolDisabled {
+    //     uint256 yelayToStake = _migrateStake(msg.sender);
 
-        // Transfer the staking balance to the yelayStaking contract
-        YLAY.claim(address(yelayStaking), yelayToStake);
-    }
-    
+    //     // Transfer the staking balance to the yelayStaking contract
+    //     YLAY.claim(address(yelayStaking), yelayToStake);
+    // }
+
     /* ========== INTERNAL FUNCTIONS ========== */
 
     /**
@@ -141,20 +138,20 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
      * @return yelayToStake The total YLAY amount to be staked after migration.
      */
     function _migrateStake(address staker) private returns (uint256 yelayToStake) {
-       require(!migratedStake[staker], "YelayMigrator:_migrateStake: Staker already migrated");
+        require(!migratedStake[staker], "YelayMigrator:_migrateStake: Staker already migrated");
+        migratedStake[staker] = true;
 
-       (uint256 yelayStaked, uint256 yelayRewards) = yelayStaking.migrateUser(staker);
-       yelayToStake += yelayStaked;
+        (uint256 yelayStaked, uint256 yelayRewards) = yelayStaking.migrateUser(staker);
+        yelayToStake += yelayStaked;
 
-       if (yelayRewards > 0) {
-           // Send claimed rewards directly to the user
-           YLAY.claim(staker, yelayRewards);
-       }
+        if (yelayRewards > 0) {
+            // Send claimed rewards directly to the user
+            YLAY.claim(staker, yelayRewards);
+        }
 
-       sYLAY.migrateUser(staker);
-       migratedStake[staker] = true;
+        sYLAY.migrateUser(staker);
 
-       emit StakeMigrated(staker, yelayStaked, yelayRewards);
+        emit StakeMigrated(staker, yelayStaked, yelayRewards);
     }
 
     /**
@@ -190,6 +187,6 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
      * @dev This ensures that SPOOL migration can only occur when the SPOOL system is fully disabled.
      */
     function _spoolDisabled() private view {
-        require(SPOOL.paused() && SPOOL.owner() == address(0), "YelayMigrator:_spoolDisabled: SPOOL is enabled");
+        require(SPOOL.paused(), "YelayMigrator:_spoolDisabled: SPOOL is enabled");
     }
 }
