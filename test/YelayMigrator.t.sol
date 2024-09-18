@@ -17,7 +17,10 @@ import {SpoolStaking} from "spool/SpoolStaking.sol";
 import {SpoolStaking2} from "../src/upgrade/SpoolStaking2.sol";
 import {VoSpoolRewards, VoSpoolRewardUser} from "spool/VoSpoolRewards.sol";
 
-import {YLAY, ISpoolOwner} from "../src/YLAY.sol";
+import "../src/external/spool-core/interfaces/ISpoolOwner.sol";
+
+import {YLAY} from "../src/YLAY.sol";
+import {YelayOwner, IYelayOwner} from "../src/YelayOwner.sol";
 import {SYLAY} from "../src/SYLAY.sol";
 import {SYLAYRewards} from "../src/SYLAYRewards.sol";
 import {YelayMigrator} from "../src/YelayMigrator.sol";
@@ -43,6 +46,7 @@ contract YelayMigratorTest is Test {
     SpoolStaking spoolStaking;
     VoSpoolRewards voSpoolRewards;
 
+    YelayOwner ylayOwner;
     YLAY ylay;
     SYLAY sYlay;
     SYLAYRewards sYlayRewards;
@@ -99,6 +103,8 @@ contract YelayMigratorTest is Test {
         spoolStaking.addToken(IERC20(address(spool)), 157248000, 10_000e18);
         voSpoolRewards.updateVoSpoolRewardRate(156, 100e18);
 
+        ylayOwner = new YelayOwner();
+
         address sYlayImpl = address(new SYLAY(ISpoolOwner(address(spoolOwner)), address(voSpool)));
         sYlay = SYLAY(address(new TransparentUpgradeableProxy(sYlayImpl, address(proxyAdmin), "")));
 
@@ -111,7 +117,7 @@ contract YelayMigratorTest is Test {
         address yelayStakingImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 6);
         address yelayStakingAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 7);
 
-        new YLAY(ISpoolOwner(address(spoolOwner)), YelayMigrator(yelayMigratorAddr));
+        new YLAY(ylayOwner, YelayMigrator(yelayMigratorAddr));
         ylay = YLAY(address(new ERC1967Proxy(ylayImpl, "")));
 
         new SYLAYRewards(address(spoolOwner), address(sYlay), yelayStakingAddr);

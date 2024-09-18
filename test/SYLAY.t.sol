@@ -2,6 +2,8 @@
 
 pragma solidity 0.8.13;
 
+import "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
 import "forge-std/Test.sol";
 import "spool-core/SpoolOwner.sol";
 
@@ -12,8 +14,10 @@ import "spool-staking-and-voting/RewardDistributor.sol";
 import "spool-staking-and-voting/SpoolStaking.sol";
 import "spool-staking-and-voting/VoSPOOL.sol";
 import "src/SYLAY.sol";
+import "src/YelayOwner.sol";
 import {YelayStaking} from "src/YelayStaking.sol";
 import "src/YelayMigrator.sol";
+import "src/libraries/ConversionLib.sol";
 
 contract SYLAYTest is Test, Utilities {
     // known addresses
@@ -23,6 +27,7 @@ contract SYLAYTest is Test, Utilities {
     VoSPOOL voSPOOL = VoSPOOL(0xaF56D16a7fe479F2fcD48FF567fF589CB2d2a0E9);
 
     // new
+    YelayOwner yelayOwner;
     ISpoolOwner spoolOwner;
     YLAY yLAY;
     SYLAY sYLAY;
@@ -51,22 +56,27 @@ contract SYLAYTest is Test, Utilities {
     function contractDeployment() public {
         // Step 1: Get the deployer's nonce and calculate future addresses
         deployer = address(this); // The deployer is the test contract
+
+        yelayOwner = new YelayOwner();
+
         uint256 deployerNonce = vm.getNonce(deployer);
 
         // Compute precomputed addresses based on the current nonce
         address precomputedSpoolOwnerAddress = vm.computeCreateAddress(deployer, deployerNonce);
-        address precomputedYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 1);
-        address precomputedSYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 2);
-        address precomputedRewardDistributorAddress = vm.computeCreateAddress(deployer, deployerNonce + 3);
-        address precomputedYelayStakingAddress = vm.computeCreateAddress(deployer, deployerNonce + 4);
-        address precomputedMigratorAddress = vm.computeCreateAddress(deployer, deployerNonce + 5);
+        address precomputedYLAYImplementationAddress = vm.computeCreateAddress(deployer, deployerNonce + 1);
+        address precomputedYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 2);
+        address precomputedSYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 3);
+        address precomputedRewardDistributorAddress = vm.computeCreateAddress(deployer, deployerNonce + 4);
+        address precomputedYelayStakingAddress = vm.computeCreateAddress(deployer, deployerNonce + 5);
+        address precomputedMigratorAddress = vm.computeCreateAddress(deployer, deployerNonce + 6);
 
         // Step 2: Deploy SpoolOwner at precomputedYLAYAddress
         spoolOwner = new SpoolOwner();
         assert(address(spoolOwner) == precomputedSpoolOwnerAddress);
 
         // Step 3: Deploy YLAY at precomputedYLAYAddress
-        yLAY = new YLAY(spoolOwner, YelayMigrator(precomputedMigratorAddress));
+        new YLAY(yelayOwner, YelayMigrator(precomputedMigratorAddress));
+        yLAY = YLAY(address(new ERC1967Proxy(precomputedYLAYImplementationAddress, "")));
         assert(address(yLAY) == precomputedYLAYAddress);
 
         // Step 4: Deploy sYLAY at precomputedSYLAYAddress
@@ -96,6 +106,9 @@ contract SYLAYTest is Test, Utilities {
 
         yLAY.initialize();
         yelayStaking.initialize();
+
+        // TODO:
+        sYLAY.migrateGlobal();
 
         rewardToken1 = IERC20(new MockToken("TEST", "TEST"));
         rewardToken2 = IERC20(new MockToken("TEST", "TEST"));
@@ -137,7 +150,7 @@ contract SYLAYTest is Test, Utilities {
     ---------------------------------- */
     function test_sYLAYDeploymentVerify() public view {
         // ASSERT - ERC20 values
-        assertEq(sYLAY.name(), "Yelay Staking Token");
+        assertEq(sYLAY.name(), "Staked Yelay");
         assertEq(sYLAY.symbol(), "sYLAY");
         assertEq(sYLAY.decimals(), 18);
         assertEq(sYLAY.balanceOf(user1), 0);
@@ -180,7 +193,7 @@ contract SYLAYTest is Test, Utilities {
 
         // ASSERT
         assertEq(sYLAY.getUserGradualVotingPower(user1), 0); // User should have 0 power at first
-        assertEq(sYLAY.totalInstantPower(), 0); // Total instant power should be 0
+        assertEq(sYLAY.totalInstantPower(), ConversionLib.convert(voSPOOL.totalInstantPower())); // Total instant power should be 0
         assertEq(sYLAY.balanceOf(user1), 0); // User should have 0 balance initially
         assertEq(sYLAY.totalSupply(), totalSupplyBefore); // Supply should not have changed initially
     }
@@ -616,7 +629,6 @@ contract SYLAYTest is Test, Utilities {
         vm.warp(block.timestamp + 52 weeks);
 
         globalGradual = sYLAY.getGlobalGradual();
-        console.log("totalMaturingAmountBefore after mint: ", globalGradual.totalMaturingAmount);
 
         uint256 burnAmount = (mintAmount / 2) + 1; // Round up
 
@@ -634,6 +646,14 @@ contract SYLAYTest is Test, Utilities {
 
         // Global gradual
         globalGradual = sYLAY.getGlobalGradual();
+        console.log("totalMaturingAmountBefore");
+        console.log(totalMaturingAmountBefore);
+        console.log("globalGradual.totalMaturingAmount");
+        console.log(globalGradual.totalMaturingAmount);
+        console.log("userAmountTrimmed");
+        console.log(userAmountTrimmed);
+        // console.log(globalGradual.totalMaturingAmount + userAmountTrimmed);
+        // TODO: something has changed here!
         assertEq(globalGradual.totalMaturingAmount, totalMaturingAmountBefore + userAmountTrimmed);
     }
 

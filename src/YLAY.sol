@@ -7,15 +7,15 @@ import "openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import "./interfaces/IYLAY.sol";
 import "./interfaces/IYelayMigrator.sol";
-import "spool-core/SpoolOwnable.sol";
+import "./YelayOwnable.sol";
 
-contract YLAY is IYLAY, SpoolOwnable, Initializable, ERC20PausableUpgradeable, UUPSUpgradeable {
+contract YLAY is IYLAY, YelayOwnable, Initializable, ERC20PausableUpgradeable, UUPSUpgradeable {
     uint256 public constant MAX_SUPPLY = 1_000_000_000e18;
 
     IYelayMigrator public immutable migrator;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ISpoolOwner _spoolOwner, IYelayMigrator _migrator) SpoolOwnable(_spoolOwner) initializer {
+    constructor(IYelayOwner _yelayOwner, IYelayMigrator _migrator) YelayOwnable(_yelayOwner) initializer {
         migrator = _migrator;
     }
 
@@ -27,22 +27,32 @@ contract YLAY is IYLAY, SpoolOwnable, Initializable, ERC20PausableUpgradeable, U
         _mint(address(this), MAX_SUPPLY);
     }
 
-    // Allow the migrator or admin to transfer minted tokens to a claimant
+    /**
+     * @notice Allow the migrator or admin to transfer minted tokens to a claimant
+     * @param claimant address
+     * @param amount to transfer
+     */
     function claim(address claimant, uint256 amount) external {
-        require(address(migrator) == _msgSender() || isSpoolOwner(), "YLAY::claim: Caller is not the migrator or admin");
+        require(address(migrator) == _msgSender() || isYelayOwner(), "YLAY::claim: Caller is not the migrator or admin");
         _transfer(address(this), claimant, amount);
     }
 
-    // Admin can pause the contract
+    /**
+     * @dev Owner can pause the contract
+     */
     function pause() external onlyOwner {
         _pause();
     }
 
-    // Admin can unpause the contract
+    /**
+     * @dev Owner can unpause the contract
+     */
     function unpause() external onlyOwner {
         _unpause();
     }
 
-    // Upgrade authorization, restricted to the admin
+    /**
+     * @dev Upgrade authorization, restricted to the owner
+     */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }
