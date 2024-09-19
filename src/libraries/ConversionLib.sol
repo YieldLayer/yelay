@@ -4,7 +4,8 @@ pragma solidity ^0.8.13;
 import "forge-std/console.sol";
 
 library ConversionLib {
-    uint256 public constant CONVERSION_RATE = 4761904761904761904; // 1b (yelaySupply) / 210000 (spoolSupply) with 18 decimals of precision
+    // 1_000_000_000 (yelaySupply) * 10 ** 18 / 140_000_000 (spoolSupply because 70_000_000 were sent to 0xdead address) with 18 decimals of precision
+    uint256 public constant CONVERSION_RATE = 7142857142857142857;
     uint256 private constant TRIM_SIZE_VOSPOOL = 10 ** 12;
     uint256 private constant TRIM_SIZE_YELAY = 10 ** 13;
 
@@ -21,14 +22,22 @@ library ConversionLib {
         return _applyConversion(spoolAmount);
     }
 
-    function convertAmount(uint48 _a, uint48 _b, uint48 _c, uint48 _d) internal pure returns (uint48 a, uint48 b, uint48 c, uint48 d) {
+    function convertAmount(uint48 _a, uint48 _b, uint48 _c, uint48 _d)
+        internal
+        pure
+        returns (uint48 a, uint48 b, uint48 c, uint48 d)
+    {
         a = uint48(_convertTrimmed(_a));
         b = uint48(_convertTrimmed(_b));
         c = uint48(_convertTrimmed(_c));
         d = uint48(_convertTrimmed(_d));
     }
 
-    function convertAmount(uint48 _a, uint48 _b, uint48 _c, uint48 _d, uint48 _e) internal pure returns (uint48 a, uint48 b, uint48 c, uint48 d, uint48 e) {
+    function convertAmount(uint48 _a, uint48 _b, uint48 _c, uint48 _d, uint48 _e)
+        internal
+        pure
+        returns (uint48 a, uint48 b, uint48 c, uint48 d, uint48 e)
+    {
         a = uint48(_convertTrimmed(_a));
         b = uint48(_convertTrimmed(_b));
         c = uint48(_convertTrimmed(_c));
