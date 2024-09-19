@@ -5,16 +5,16 @@ pragma solidity 0.8.13;
 import "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import "forge-std/Test.sol";
-import "spool-core/SpoolOwner.sol";
+import "spool/external/spool-core/SpoolOwner.sol";
 
-import "test/mocks/MockToken.sol";
+import {MockToken} from "test/mocks/MockToken.sol";
 import "test/shared/Utilities.sol";
 import "src/YLAY.sol";
 import {VoSPOOL} from "spool/VoSPOOL.sol";
-import "spool-staking-and-voting/RewardDistributor.sol";
-import "spool-staking-and-voting/SpoolStaking.sol";
+import {RewardDistributor} from "spool/RewardDistributor.sol";
+import {SpoolStaking} from "spool/SpoolStaking.sol";
 import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
-import "src/YelayOwner.sol";
+import {YelayOwner} from "src/YelayOwner.sol";
 import {YelayStaking} from "src/YelayStaking.sol";
 import "src/YelayMigrator.sol";
 import "src/libraries/ConversionLib.sol";

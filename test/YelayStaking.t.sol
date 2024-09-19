@@ -5,16 +5,15 @@ pragma solidity 0.8.13;
 import "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import "forge-std/Test.sol";
-import "spool-core/SpoolOwner.sol";
+import "spool/external/spool-core/SpoolOwner.sol";
 
 import {MockToken} from "test/mocks/MockToken.sol";
 import "test/shared/Utilities.sol";
 import {YLAY} from "src/YLAY.sol";
 import {YelayOwner} from "src/YelayOwner.sol";
 import {sYLAYRewards} from "src/sYLAYRewards.sol";
-import {RewardDistributor} from "spool-staking-and-voting/RewardDistributor.sol";
-import {SpoolStaking} from "spool-staking-and-voting/SpoolStaking.sol";
-import {VoSPOOL, IVoSPOOL} from "spool-staking-and-voting/VoSPOOL.sol";
+import {RewardDistributor} from "src/RewardDistributor.sol";
+import {VoSPOOL, IVoSPOOL} from "spool/VoSPOOL.sol";
 import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
 import {YelayStaking, IERC20} from "src/YelayStaking.sol";
 import {YelayMigrator} from "src/YelayMigrator.sol";
@@ -22,7 +21,7 @@ import {YelayMigrator} from "src/YelayMigrator.sol";
 contract YelayStakingTest is Test, Utilities {
     // known addresses
     // TODO as constants
-    SpoolStaking spoolStaking = SpoolStaking(0xc3160C5cc63B6116DD182faA8393d3AD9313e213);
+    YelayStaking spoolStaking = YelayStaking(0xc3160C5cc63B6116DD182faA8393d3AD9313e213);
     IERC20 SPOOL = IERC20(0x40803cEA2b2A32BdA1bE61d3604af6a814E70976);
     VoSPOOL voSPOOL = VoSPOOL(0xaF56D16a7fe479F2fcD48FF567fF589CB2d2a0E9);
 
@@ -84,12 +83,12 @@ contract YelayStakingTest is Test, Utilities {
         assert(address(sYlay) == precomputedSYLAYAddress);
 
         // Step 5: Deploy RewardDistributor at precomputedRewardDistributorAddress
-        rewardDistributor = new RewardDistributor(spoolOwner);
+        rewardDistributor = new RewardDistributor(yelayOwner);
         assert(address(rewardDistributor) == precomputedRewardDistributorAddress);
 
         // Step 6: Deploy YelayStaking at precomputedYelayStakingAddress
         yelayStaking = new YelayStaking(
-            address(spoolOwner),
+            address(yelayOwner),
             address(yLAY),
             address(sYlay),
             precomputedSYLAYRewardsAddress,
@@ -100,10 +99,10 @@ contract YelayStakingTest is Test, Utilities {
         assert(address(yelayStaking) == precomputedYelayStakingAddress);
 
         // Step 7: Deploy Migrator at precomputedMigratorAddress
-        yelayMigrator = new YelayMigrator(address(spoolOwner), yLAY, sYlay, address(yelayStaking), address(SPOOL));
+        yelayMigrator = new YelayMigrator(address(yelayOwner), yLAY, sYlay, address(yelayStaking), address(SPOOL));
         assert(address(yelayMigrator) == precomputedMigratorAddress);
 
-        sYlayRewards = new sYLAYRewards(address(spoolOwner), address(sYlay), address(yelayStaking));
+        sYlayRewards = new sYLAYRewards(address(yelayStaking), address(sYlay), address(yelayOwner));
         assert(address(sYlayRewards) == precomputedSYLAYRewardsAddress);
 
         yLAY.initialize();
@@ -385,7 +384,7 @@ contract YelayStakingTest is Test, Utilities {
     /// @notice Stake for by user, should revert
     function test_stakeForByUserShouldRevert() public setUpStakeFor {
         // ARRANGE & ACT
-        vm.expectRevert("SpoolStaking::canStakeForAddress: Cannot stake for other addresses");
+        vm.expectRevert("YelayStaking::canStakeForAddress: Cannot stake for other addresses");
         vm.prank(user1);
         yelayStaking.stakeFor(user2, 1000 ether);
     }
@@ -397,7 +396,7 @@ contract YelayStakingTest is Test, Utilities {
         yelayStaking.stake(1000 ether);
 
         // ACT & ASSERT
-        vm.expectRevert("SpoolStaking::canStakeForAddress: Address already staked");
+        vm.expectRevert("YelayStaking::canStakeForAddress: Address already staked");
         yelayStaking.stakeFor(user1, 1000 ether);
     }
 
@@ -408,7 +407,7 @@ contract YelayStakingTest is Test, Utilities {
         yelayStaking.stakeFor(user1, 1000 ether);
 
         // ACT & ASSERT
-        vm.expectRevert("SpoolStaking::canStakeForAddress: Address staked by another address");
+        vm.expectRevert("YelayStaking::canStakeForAddress: Address staked by another address");
         vm.prank(stakeForWallet2);
         yelayStaking.stakeFor(user1, 1000 ether);
     }
@@ -478,7 +477,7 @@ contract YelayStakingTest is Test, Utilities {
         yelayStaking.stakeFor(user1, 1000 ether);
 
         // ACT & ASSERT
-        vm.expectRevert("SpoolStaking::allowUnstakeFor: Cannot allow unstaking for address");
+        vm.expectRevert("YelayStaking::allowUnstakeFor: Cannot allow unstaking for address");
         vm.prank(user1);
         yelayStaking.allowUnstakeFor(user1);
     }
@@ -490,7 +489,7 @@ contract YelayStakingTest is Test, Utilities {
         yelayStaking.stakeFor(user1, 1000 ether);
 
         // ACT & ASSERT
-        vm.expectRevert("SpoolStaking::allowUnstakeFor: Cannot allow unstaking for address");
+        vm.expectRevert("YelayStaking::allowUnstakeFor: Cannot allow unstaking for address");
         vm.prank(stakeForWallet2);
         yelayStaking.allowUnstakeFor(user1);
     }

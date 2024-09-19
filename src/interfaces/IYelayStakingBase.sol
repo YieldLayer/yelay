@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 
 import "openzeppelin-contracts/token/ERC20/IERC20.sol";
 
-interface ISpoolStaking {
+interface IYelayStakingBase {
     /* ========== EVENTS ========== */
 
     event Staked(address indexed user, uint256 amount);
@@ -19,7 +19,7 @@ interface ISpoolStaking {
 
     event RewardPaid(IERC20 token, address indexed user, uint256 reward);
 
-    event VoSpoolRewardPaid(IERC20 token, address indexed user, uint256 reward);
+    event sYLAYRewardPaid(IERC20 token, address indexed user, uint256 reward);
 
     event RewardAdded(IERC20 indexed token, uint256 amount, uint256 duration);
 

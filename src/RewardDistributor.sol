@@ -3,30 +3,31 @@
 pragma solidity 0.8.13;
 
 import "openzeppelin-contracts/security/Pausable.sol";
-import "spool-core/SpoolOwnable.sol";
-import "./interfaces/IRewardDistributor.sol";
-
 import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
+
+import "./YelayOwnable.sol";
+
+import "./interfaces/IRewardDistributor.sol";
 
 /**
  * @notice Implementation of the {IRewardDistributor} interface.
  *
  * @dev
  * This contract has the simple logic to distribute ERC20 tokens
- * to the desired address (e.g. SpoolStaking).
+ * to the desired address (e.g. YelayStaking).
  * It can be called from the whitelisted addresses to pay the rewards.
  *
  * Reward tokens should be sent to this contract in advance.
  *
- * The contract is pausable by the Spool DAO or the pauser.
+ * The contract is pausable by the Yelay or the pauser.
  */
-contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
+contract RewardDistributor is Pausable, YelayOwnable, IRewardDistributor {
     using SafeERC20 for IERC20;
 
     /* ========== STATE VARIABLES ========== */
 
     /// @notice Is the address reward distributor
-    /// @dev e.g. Spool staking contract
+    /// @dev e.g. Yelay staking contract
     mapping(address => bool) public isDistributor;
 
     /// @notice Can the address pause the contract
@@ -35,11 +36,11 @@ contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
     /* ========== CONSTRUCTOR ========== */
 
     /**
-     * @notice Sets the Spool DAO owner contract
+     * @notice Sets the Yelay owner contract
      *
-     * @param _spoolOwner Spool DAO owner contract
+     * @param _yelayOwner Yelay owner contract
      */
-    constructor(ISpoolOwner _spoolOwner) SpoolOwnable(_spoolOwner) {}
+    constructor(IYelayOwner _yelayOwner) YelayOwnable(_yelayOwner) {}
 
     /* ========== DISTRIBUTE REWARDS FUNCTIONS ========== */
 
@@ -104,7 +105,7 @@ contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
      * @dev
      * Requirements:
      *
-     * - the caller must be the contract owner (Spool DAO)
+     * - the caller must be the contract owner (Yelay)
      *
      * @param account address to retrieve the token to
      * @param token ERC20 token to retrieve
@@ -121,7 +122,7 @@ contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
      * @dev
      * Requirements:
      *
-     * - the caller must be the contract owner (Spool DAO)
+     * - the caller must be the contract owner (Yelay)
      *
      * @param account address to manage the distributer role for
      * @param _set true to set the role, flase to remove
@@ -137,7 +138,7 @@ contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
      * @dev
      * Requirements:
      *
-     * - the caller must be the contract owner (Spool DAO)
+     * - the caller must be the contract owner (Yelay)
      *
      * @param account address to manage the pauser role for
      * @param _set true to set the role, flase to remove
@@ -153,7 +154,7 @@ contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
      * @dev
      * Requirements:
      *
-     * - the caller must be the contract owner (Spool DAO)
+     * - the caller must be the contract owner (Yelay)
      */
     function unpause() external onlyOwner {
         _unpause();
@@ -166,7 +167,7 @@ contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
      * @dev
      * Requirements:
      *
-     * - the caller must be the pauser or the contract owner (Spool DAO)
+     * - the caller must be the pauser or the contract owner (Yelay)
      */
     function pause() external onlyPauser {
         _pause();
@@ -185,7 +186,7 @@ contract RewardDistributor is Pausable, SpoolOwnable, IRewardDistributor {
      * @notice Ensures that the caller is the pauser
      */
     function _onlyPauser() private view {
-        require(isPauser[msg.sender] || isSpoolOwner(), "Controller::_onlyPauser: Can only be invoked by pauser");
+        require(isPauser[msg.sender] || isYelayOwner(), "Controller::_onlyPauser: Can only be invoked by pauser");
     }
 
     /* ========== MODIFIERS ========== */

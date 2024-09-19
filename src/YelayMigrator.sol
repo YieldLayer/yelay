@@ -2,16 +2,16 @@
 
 pragma solidity 0.8.13;
 
-import "spool-core/SpoolOwnable.sol";
-import "spool-staking-and-voting/interfaces/ISpoolStaking.sol";
+import "./YelayOwnable.sol";
+import "src/libraries/ConversionLib.sol";
+
 import "./interfaces/IERC20PausableOwnable.sol";
 import "./interfaces/IsYLAY.sol";
 import "./interfaces/IYelayMigrator.sol";
 import "./interfaces/IYelayStaking.sol";
 import "./interfaces/IYLAY.sol";
-import "src/libraries/ConversionLib.sol";
 
-contract YelayMigrator is SpoolOwnable, IYelayMigrator {
+contract YelayMigrator is YelayOwnable, IYelayMigrator {
     /* ========== STATE VARIABLES ========== */
 
     /// @notice Pausable and ownable ERC20 interface for the SPOOL token.
@@ -47,14 +47,14 @@ contract YelayMigrator is SpoolOwnable, IYelayMigrator {
 
     /**
      * @notice Constructor to initialize the YelayMigrator contract.
-     * @param _spoolOwner The address of the owner for SpoolOwnable.
+     * @param _yelayOwner The address of the owner for SpoolOwnable.
      * @param _YLAY The address of the YLAY token contract.
      * @param _sYLAY The address of the sYLAY (staked YLAY) contract.
      * @param _yelayStaking The address of the Yelay staking contract.
      * @param _SPOOL The address of the SPOOL token contract.
      */
-    constructor(address _spoolOwner, IYLAY _YLAY, IsYLAY _sYLAY, address _yelayStaking, address _SPOOL)
-        SpoolOwnable(ISpoolOwner(_spoolOwner))
+    constructor(address _yelayOwner, IYLAY _YLAY, IsYLAY _sYLAY, address _yelayStaking, address _SPOOL)
+        YelayOwnable(IYelayOwner(_yelayOwner))
     {
         YLAY = _YLAY;
         sYLAY = _sYLAY;

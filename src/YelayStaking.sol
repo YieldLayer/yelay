@@ -8,16 +8,18 @@ import "src/libraries/ConversionLib.sol";
 
 import "forge-std/console.sol";
 
-import {SpoolStaking2, IERC20, RewardConfiguration} from "./upgrade/SpoolStaking2.sol";
+import {SpoolStaking2} from "./upgrade/SpoolStaking2.sol";
+import {YelayStakingBase, IERC20} from "./YelayStakingBase.sol";
 
-contract YelayStaking is SpoolStaking2 {
+contract YelayStaking is YelayStakingBase {
     /* ========== STATE VARIABLES ========== */
 
     /// @notice The interface for staked YLAY (sYLAY) tokens.
     IsYLAY public immutable sYLAY;
 
     /// @notice The SpoolStaking contract, used for migration purposes.
-    SpoolStaking2 public immutable spoolStaking;
+    // TODO: type
+    YelayStakingBase public immutable spoolStaking;
 
     /// @notice The total amount of SPOOL tokens that have been migrated to YLAY staking.
     uint256 private _totalStakedSPOOLMigrated;
@@ -32,7 +34,7 @@ contract YelayStaking is SpoolStaking2 {
 
     /**
      * @notice Constructor to initialize the YelayStaking contract.
-     * @param _spoolOwner The address of the owner for the SpoolOwnable contract.
+     * @param _yelayOwner The address of the owner for the SpoolOwnable contract.
      * @param _YLAY The address of the YLAY token.
      * @param _sYLAY The address of the sYLAY (staked YLAY) contract.
      * @param _rewardDistributor The address of the reward distributor contract.
@@ -40,17 +42,22 @@ contract YelayStaking is SpoolStaking2 {
      * @param _migrator The address of the contract responsible for migration.
      */
     constructor(
-        address _spoolOwner,
+        address _yelayOwner,
         address _YLAY,
         address _sYLAY,
         address _sYLAYRewards,
         address _rewardDistributor,
         address _spoolStaking,
         address _migrator
-    ) SpoolStaking2(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _spoolOwner) {
+    ) YelayStakingBase(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _yelayOwner) {
+        // IERC20 _stakingToken,
+        // IVoSPOOL _voSpool,
+        // IVoSpoolRewards _voSpoolRewards,
+        // IRewardDistributor _rewardDistributor,
+        // ISpoolOwner _spoolOwner
         sYLAY = IsYLAY(_sYLAY);
-        spoolStaking = SpoolStaking2(_spoolStaking);
-        SPOOL = spoolStaking.stakingToken();
+        spoolStaking = YelayStakingBase(_spoolStaking);
+        SPOOL = IERC20(address(spoolStaking.stakingToken()));
         migrator = _migrator;
     }
 
@@ -78,7 +85,7 @@ contract YelayStaking is SpoolStaking2 {
         // Handle staking rewards migration.
         // Note: voSPOOL rewards are not migrated. Upgrades to SpoolStaking/voSPOOLRewards are needed for full reward migration.
         uint256 userSpoolRewards = spoolStaking.earned(SPOOL, user);
-        uint256 userVoSpoolRewards = spoolStaking.getUpdatedVoSpoolRewardAmount(user);
+        uint256 userVoSpoolRewards = SpoolStaking2(address(spoolStaking)).getUpdatedVoSpoolRewardAmount(user);
         // console.log("userSpoolRewards");
         // console.log(userSpoolRewards);
         // console.log("userVoSpoolRewards");

@@ -1,44 +1,44 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.13;
 
 import "openzeppelin-contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "spool-core/SpoolOwnable.sol";
-import "./interfaces/ISpoolStaking.sol";
-
 import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
-import "./external/@openzeppelin/utils/SafeCast.sol";
-import "./interfaces/IVoSPOOL.sol";
+
+import "./YelayOwnable.sol";
+
+import "./libraries/SafeCast.sol";
+
+import "./interfaces/IYelayStakingBase.sol";
+import "./interfaces/IsYLAYRewards.sol";
+import "./interfaces/IsYLAY.sol";
 import "./interfaces/IRewardDistributor.sol";
 
-import "forge-std/console.sol";
-
-/* ========== STRUCTS ========== */
-
-// The reward configuration struct, containing all the necessary data of a typical Synthetix StakingReward contract
-struct RewardConfiguration {
-    uint32 rewardsDuration;
-    uint32 periodFinish;
-    uint192 rewardRate; // rewards per second multiplied by accuracy
-    uint32 lastUpdateTime;
-    uint224 rewardPerTokenStored;
-    mapping(address => uint256) userRewardPerTokenPaid;
-    mapping(address => uint256) rewards;
-}
-
 /**
- * @notice Implementation of the {ISpoolStaking} interface.
+ * @notice Implementation of the {IYelayStakingBase} interface.
  *
  * @dev
  * An adaptation of the Synthetix StakingRewards contract to support multiple tokens:
  *
  * https://github.com/Synthetixio/synthetix/blob/develop/contracts/StakingRewards.sol
  *
- * At stake, gradual voSPOOL (Spool DAO Voting Token) is minted and accumulated every week.
- * At unstake all voSPOOL is burned. The maturing process of voSPOOL restarts.
+ * At stake, gradual sYLAY (Yelay Voting Token) is minted and accumulated every week.
+ * At unstake all sYLAY is burned. The maturing process of sYLAY restarts.
  */
-contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking {
+contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStakingBase {
     using SafeERC20 for IERC20;
+
+    /* ========== STRUCTS ========== */
+
+    // The reward configuration struct, containing all the necessary data of a typical Synthetix StakingReward contract
+    struct RewardConfiguration {
+        uint32 rewardsDuration;
+        uint32 periodFinish;
+        uint192 rewardRate; // rewards per second multiplied by accuracy
+        uint32 lastUpdateTime;
+        uint224 rewardPerTokenStored;
+        mapping(address => uint256) userRewardPerTokenPaid;
+        mapping(address => uint256) rewards;
+    }
 
     /* ========== CONSTANTS ========== */
 
@@ -47,13 +47,16 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 
     /* ========== STATE VARIABLES ========== */
 
-    /// @notice SPOOL token address
+    /// @notice YLAY token address
     IERC20 public immutable stakingToken;
 
-    /// @notice voSPOOL token address
-    IVoSPOOL public immutable voSpool;
+    /// @notice sYLAY token address
+    IsYLAY public immutable sYlay;
 
-    /// @notice Spool reward distributor
+    /// @notice sYLAY token rewards address
+    IsYLAYRewards public immutable sYlayRewards;
+
+    /// @notice Yelay reward distributor
     IRewardDistributor public immutable rewardDistributor;
 
     /// @notice Reward token configurations
@@ -65,10 +68,10 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     /// @notice Blacklisted force-removed tokens
     mapping(IERC20 => bool) public tokenBlacklist;
 
-    /// @notice Total SPOOL staked
+    /// @notice Total YLAY staked
     uint256 public totalStaked;
 
-    /// @notice Account SPOOL staked balance
+    /// @notice Account YLAY staked balance
     mapping(address => uint256) public balances;
 
     /// @notice Whitelist showing if address can stake for another address
@@ -83,17 +86,23 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     /**
      * @notice Sets the immutable values
      *
-     * @param _stakingToken SPOOL token
-     * @param _voSpool Spool voting token (voSPOOL)
+     * @param _stakingToken YLAY token
+     * @param _sYlay Yelay voting token (sYLAY)
+     * @param _sYlayRewards sYLAY rewards contract
      * @param _rewardDistributor reward distributor contract
-     * @param _spoolOwner Spool DAO owner contract
+     * @param _yelayOwner Yelay owner contract
      */
-    constructor(IERC20 _stakingToken, IVoSPOOL _voSpool, IRewardDistributor _rewardDistributor, ISpoolOwner _spoolOwner)
-        SpoolOwnable(_spoolOwner)
-    {
-        stakingToken = _stakingToken;
-        voSpool = _voSpool;
-        rewardDistributor = _rewardDistributor;
+    constructor(
+        address _stakingToken,
+        address _sYlay,
+        address _sYlayRewards,
+        address _rewardDistributor,
+        address _yelayOwner
+    ) YelayOwnable(IYelayOwner(_yelayOwner)) {
+        stakingToken = IERC20(_stakingToken);
+        sYlay = IsYLAY(_sYlay);
+        sYlayRewards = IsYLAYRewards(_sYlayRewards);
+        rewardDistributor = IRewardDistributor(_rewardDistributor);
     }
 
     /* ========== INITIALIZER ========== */
@@ -139,7 +148,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 
     /* ========== MUTATIVE FUNCTIONS ========== */
 
-    function stake(uint256 amount) external virtual nonReentrant updateRewards(msg.sender) {
+    function stake(uint256 amount) external nonReentrant updateRewards(msg.sender) {
         _stake(msg.sender, amount);
 
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -148,35 +157,41 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     }
 
     function _stake(address account, uint256 amount) private {
-        require(amount > 0, "SpoolStaking::_stake: Cannot stake 0");
+        require(amount > 0, "YelayStaking::_stake: Cannot stake 0");
 
         unchecked {
             totalStaked = totalStaked += amount;
             balances[account] += amount;
         }
 
-        // mint gradual voSPOOL for the account
-        voSpool.mintGradual(account, amount);
+        // mint gradual sYLAY for the account
+        sYlay.mintGradual(account, amount);
     }
 
-    function compound() external virtual nonReentrant {
-        // collect SPOOL earned fom spool rewards and stake them
-        uint256 reward = _getRewardForCompound(msg.sender);
+    function compound(bool doCompoundsYlayRewards) external nonReentrant {
+        // collect YLAY earned fom Yelay rewards and stake them
+        uint256 reward = _getRewardForCompound(msg.sender, doCompoundsYlayRewards);
 
         if (reward > 0) {
             // update user rewards before staking
-            _updateSpoolRewards(msg.sender);
+            _updateYelayRewards(msg.sender);
+
+            // update user sYLAY based reward before staking
+            // skip updating sYLAY reward if we compounded form it as it's already updated
+            if (!doCompoundsYlayRewards) {
+                _updatesYlayReward(msg.sender);
+            }
 
             // stake collected reward
             _stake(msg.sender, reward);
-            // move compounded SPOOL reward to this contract
+            // move compounded YLAY reward to this contract
             rewardDistributor.payReward(address(this), stakingToken, reward);
         }
     }
 
-    function unstake(uint256 amount) public virtual nonReentrant notStakedBy updateRewards(msg.sender) {
-        require(amount > 0, "SpoolStaking::unstake: Cannot withdraw 0");
-        require(amount <= balances[msg.sender], "SpoolStaking::unstake: Cannot unstake more than staked");
+    function unstake(uint256 amount) public nonReentrant notStakedBy updateRewards(msg.sender) {
+        require(amount > 0, "YelayStaking::unstake: Cannot withdraw 0");
+        require(amount <= balances[msg.sender], "YelayStaking::unstake: Cannot unstake more than staked");
 
         unchecked {
             totalStaked = totalStaked -= amount;
@@ -185,17 +200,17 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 
         stakingToken.safeTransfer(msg.sender, amount);
 
-        // burn gradual voSPOOL for the sender
+        // burn gradual sYLAY for the sender
         if (balances[msg.sender] == 0) {
-            voSpool.burnGradual(msg.sender, 0, true);
+            sYlay.burnGradual(msg.sender, 0, true);
         } else {
-            voSpool.burnGradual(msg.sender, amount, false);
+            sYlay.burnGradual(msg.sender, amount, false);
         }
 
         emit Unstaked(msg.sender, amount);
     }
 
-    function _getRewardForCompound(address account)
+    function _getRewardForCompound(address account, bool doCompoundsYlayRewards)
         internal
         updateReward(stakingToken, account)
         returns (uint256 reward)
@@ -207,24 +222,41 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
             config.rewards[account] = 0;
             emit RewardCompounded(msg.sender, reward);
         }
-    }
 
-    function getRewards(IERC20[] memory tokens) external virtual nonReentrant notStakedBy {
-        for (uint256 i; i < tokens.length; i++) {
-            _getReward(tokens[i], msg.sender);
+        if (doCompoundsYlayRewards) {
+            _updatesYlayReward(account);
+            uint256 sYlayreward = sYlayRewards.flushRewards(account);
+
+            if (sYlayreward > 0) {
+                reward += sYlayreward;
+                emit VoRewardCompounded(msg.sender, reward);
+            }
         }
     }
 
-    function getActiveRewards() external virtual nonReentrant notStakedBy {
-        _getActiveRewards(msg.sender);
+    function getRewards(IERC20[] memory tokens, bool doClaimsYlayRewards) external nonReentrant notStakedBy {
+        for (uint256 i; i < tokens.length; i++) {
+            _getReward(tokens[i], msg.sender);
+        }
+
+        if (doClaimsYlayRewards) {
+            _getsYlayRewards(msg.sender);
+        }
     }
 
-    function getAccountRewards(address account, IERC20 token) external updateRewards(account) returns (uint256) {
-        // get SPOOL based rewards
-        RewardConfiguration storage config = rewardConfiguration[token];
-        uint256 reward = config.rewards[account];
+    function getActiveRewards(bool doClaimsYlayRewards) external nonReentrant notStakedBy {
+        _getActiveRewards(msg.sender);
 
-        return reward;
+        if (doClaimsYlayRewards) {
+            _getsYlayRewards(msg.sender);
+        }
+    }
+
+    function getUpdatedsYlayRewardAmount() external returns (uint256 rewards) {
+        // update rewards
+        rewards = sYlayRewards.updateRewards(msg.sender);
+        // update and store users sYLAY
+        sYlay.updateUserVotingPower(msg.sender);
     }
 
     function _getActiveRewards(address account) internal {
@@ -237,7 +269,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     function _getReward(IERC20 token, address account) internal updateReward(token, account) {
         RewardConfiguration storage config = rewardConfiguration[token];
 
-        require(config.rewardsDuration != 0, "SpoolStaking::_getReward: Bad reward token");
+        require(config.rewardsDuration != 0, "YelayStaking::_getReward: Bad reward token");
 
         uint256 reward = config.rewards[account];
         if (reward > 0) {
@@ -247,11 +279,20 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
         }
     }
 
+    function _getsYlayRewards(address account) internal {
+        _updatesYlayReward(account);
+        uint256 reward = sYlayRewards.flushRewards(account);
+
+        if (reward > 0) {
+            rewardDistributor.payReward(account, stakingToken, reward);
+            emit sYLAYRewardPaid(stakingToken, account, reward);
+        }
+    }
+
     /* ========== RESTRICTED FUNCTIONS ========== */
 
     function stakeFor(address account, uint256 amount)
         external
-        virtual
         nonReentrant
         canStakeForAddress(account)
         updateRewards(account)
@@ -269,14 +310,14 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
      *
      * Requirements:
      *
-     * - the caller must be the Spool DAO or address that staked for `allowFor` address
+     * - the caller must be the Yelay or address that staked for `allowFor` address
      *
      * @param allowFor address to allow unstaking for
      */
-    function allowUnstakeFor(address allowFor) external virtual {
+    function allowUnstakeFor(address allowFor) external {
         require(
-            (canStakeFor[msg.sender] && stakedBy[allowFor] == msg.sender) || isSpoolOwner(),
-            "SpoolStaking::allowUnstakeFor: Cannot allow unstaking for address"
+            (canStakeFor[msg.sender] && stakedBy[allowFor] == msg.sender) || isYelayOwner(),
+            "YelayStaking::allowUnstakeFor: Cannot allow unstaking for address"
         );
         // reset address to 0 to allow unstaking
         stakedBy[allowFor] = address(0);
@@ -293,7 +334,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
      *
      * Requirements:
      *
-     * - the caller must be the reward Spool DAO
+     * - the caller must be the reward Yelay
      * - the reward duration must be non-zero
      * - the token must not have already been added
      *
@@ -301,9 +342,9 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     function addToken(IERC20 token, uint32 rewardsDuration, uint256 reward) external onlyOwner {
         RewardConfiguration storage config = rewardConfiguration[token];
 
-        require(!tokenBlacklist[token], "SpoolStaking::addToken: Cannot add blacklisted token");
-        require(rewardsDuration != 0, "SpoolStaking::addToken: Reward duration cannot be 0");
-        require(config.lastUpdateTime == 0, "SpoolStaking::addToken: Token already added");
+        require(!tokenBlacklist[token], "YelayStaking::addToken: Cannot add blacklisted token");
+        require(rewardsDuration != 0, "YelayStaking::addToken: Reward duration cannot be 0");
+        require(config.lastUpdateTime == 0, "YelayStaking::addToken: Token already added");
 
         rewardTokens.push(token);
 
@@ -317,7 +358,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     function notifyRewardAmount(IERC20 token, uint32 _rewardsDuration, uint256 reward) external onlyOwner {
         RewardConfiguration storage config = rewardConfiguration[token];
         config.rewardsDuration = _rewardsDuration;
-        require(rewardConfiguration[token].lastUpdateTime != 0, "SpoolStaking::notifyRewardAmount: Token not yet added");
+        require(rewardConfiguration[token].lastUpdateTime != 0, "YelayStaking::notifyRewardAmount: Token not yet added");
         _notifyRewardAmount(token, reward);
     }
 
@@ -326,7 +367,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
 
         require(
             config.rewardPerTokenStored + (reward * REWARD_ACCURACY) <= type(uint192).max,
-            "SpoolStaking::_notifyRewardAmount: Reward amount too big"
+            "YelayStaking::_notifyRewardAmount: Reward amount too big"
         );
 
         uint32 newPeriodFinish = uint32(block.timestamp) + config.rewardsDuration;
@@ -366,7 +407,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
      *
      * Requirements:
      *
-     * - the caller must be the spool owner or Spool DAO
+     * - the caller must be the Yelay owner or Yelay
      * - cannot claim vault underlying token
      * - cannot only execute if the reward finished
      *
@@ -392,7 +433,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     }
 
     function recoverERC20(IERC20 tokenAddress, uint256 tokenAmount, address recoverTo) external onlyOwner {
-        require(tokenAddress != stakingToken, "SpoolStaking::recoverERC20: Cannot withdraw the staking token");
+        require(tokenAddress != stakingToken, "YelayStaking::recoverERC20: Cannot withdraw the staking token");
         tokenAddress.safeTransfer(recoverTo, tokenAmount);
     }
 
@@ -405,14 +446,17 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
      * of a user changes.
      */
     function _updateRewards(address account) private {
-        // update SPOOL based rewards
-        _updateSpoolRewards(account);
+        // update YLAY based rewards
+        _updateYelayRewards(account);
+
+        // update sYLAY based reward
+        _updatesYlayReward(account);
     }
 
-    function _updateSpoolRewards(address account) private {
+    function _updateYelayRewards(address account) private {
         uint256 _rewardTokensCount = rewardTokens.length;
 
-        // update SPOOL based rewards
+        // update YLAY based rewards
         for (uint256 i; i < _rewardTokensCount; i++) {
             _updateReward(rewardTokens[i], account);
         }
@@ -426,6 +470,22 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
             config.rewards[account] = earned(token, account);
             config.userRewardPerTokenPaid[account] = config.rewardPerTokenStored;
         }
+    }
+
+    /**
+     * @notice Update rewards collected from account sYLAY
+     * @dev
+     * First we update rewards calling `sYlayRewards.updateRewards`
+     * - Here we only simulate the reward accumulated over tranches
+     * Then we update and store users power by calling sYLAY contract
+     * - Here we actually store the udated values.
+     * - If store wouldn't happen, next time we'd simulate the same sYLAY tranches again
+     */
+    function _updatesYlayReward(address account) private {
+        // update rewards
+        sYlayRewards.updateRewards(account);
+        // update and store users sYLAY
+        sYlay.updateUserVotingPower(account);
     }
 
     function _removeReward(IERC20 token) private {
@@ -444,7 +504,7 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     function _onlyFinished(IERC20 token) private view {
         require(
             block.timestamp > rewardConfiguration[token].periodFinish,
-            "SpoolStaking::_onlyFinished: Reward not finished"
+            "YelayStaking::_onlyFinished: Reward not finished"
         );
     }
 
@@ -467,26 +527,26 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     modifier canStakeForAddress(address account) {
         // verify sender can stake for
         require(
-            canStakeFor[msg.sender] || isSpoolOwner(),
-            "SpoolStaking::canStakeForAddress: Cannot stake for other addresses"
+            canStakeFor[msg.sender] || isYelayOwner(),
+            "YelayStaking::canStakeForAddress: Cannot stake for other addresses"
         );
 
         // if address already staked, verify further
         if (balances[account] > 0) {
             // verify address was staked by some other address
-            require(stakedBy[account] != address(0), "SpoolStaking::canStakeForAddress: Address already staked");
+            require(stakedBy[account] != address(0), "YelayStaking::canStakeForAddress: Address already staked");
 
-            // verify address was staked by the sender or sender is the Spool DAO
+            // verify address was staked by the sender or sender is the Yelay
             require(
-                stakedBy[account] == msg.sender || isSpoolOwner(),
-                "SpoolStaking::canStakeForAddress: Address staked by another address"
+                stakedBy[account] == msg.sender || isYelayOwner(),
+                "YelayStaking::canStakeForAddress: Address staked by another address"
             );
         }
         _;
     }
 
     modifier notStakedBy() {
-        require(stakedBy[msg.sender] == address(0), "SpoolStaking::notStakedBy: Cannot withdraw until allowed");
+        require(stakedBy[msg.sender] == address(0), "YelayStaking::notStakedBy: Cannot withdraw until allowed");
         _;
     }
 

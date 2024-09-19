@@ -9,15 +9,13 @@ import "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 
 import {SPOOL} from "../src/SPOOL.sol";
-import {SpoolOwner} from "spool/external/spool-core/SpoolOwner.sol";
+import {SpoolOwner, ISpoolOwner} from "spool/external/spool-core/SpoolOwner.sol";
 import {IERC20} from "spool/external/@openzeppelin/token/ERC20/IERC20.sol";
 import {VoSPOOL, Tranche} from "spool/VoSPOOL.sol";
 import {RewardDistributor} from "spool/RewardDistributor.sol";
 import {SpoolStaking} from "spool/SpoolStaking.sol";
 import {SpoolStaking2} from "../src/upgrade/SpoolStaking2.sol";
 import {VoSpoolRewards, VoSpoolRewardUser} from "spool/VoSpoolRewards.sol";
-
-import "../src/external/spool-core/interfaces/ISpoolOwner.sol";
 
 import {YLAY} from "../src/YLAY.sol";
 import {YelayOwner, IYelayOwner} from "../src/YelayOwner.sol";
@@ -120,11 +118,11 @@ contract YelayMigratorTest is Test {
         ylay = YLAY(address(new ERC1967Proxy(ylayImpl, "")));
         assert(address(ylay) == ylayAddr);
 
-        new sYLAYRewards(address(spoolOwner), address(sYlayAddr), yelayStakingAddr);
+        new sYLAYRewards(yelayStakingAddr, address(sYlayAddr), address(yelayOwner));
         sYlayRewards = sYLAYRewards(address(new TransparentUpgradeableProxy(sYlayRewardsImpl, address(proxyAdmin), "")));
         assert(address(sYlayRewards) == sYlayRewardsAddr);
 
-        new YelayMigrator(address(spoolOwner), ylay, IsYLAY(sYlayAddr), yelayStakingAddr, address(spool));
+        new YelayMigrator(address(yelayOwner), ylay, IsYLAY(sYlayAddr), yelayStakingAddr, address(spool));
         yelayMigrator =
             YelayMigrator(address(new TransparentUpgradeableProxy(yelayMigratorImpl, address(proxyAdmin), "")));
         assert(
@@ -135,7 +133,7 @@ contract YelayMigratorTest is Test {
         assert(address(yelayMigrator.SPOOL()) == address(spool));
 
         new YelayStaking(
-            address(spoolOwner),
+            address(yelayOwner),
             address(ylay),
             address(sYlayAddr),
             address(sYlayRewards),
