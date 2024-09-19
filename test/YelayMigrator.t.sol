@@ -11,7 +11,7 @@ import "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 import {SPOOL} from "../src/SPOOL.sol";
 import {SpoolOwner, ISpoolOwner} from "spool/external/spool-core/SpoolOwner.sol";
 import {IERC20} from "spool/external/@openzeppelin/token/ERC20/IERC20.sol";
-import {VoSPOOL, Tranche} from "spool/VoSPOOL.sol";
+import {VoSPOOL, Tranche, UserTranche} from "spool/VoSPOOL.sol";
 import {RewardDistributor} from "spool/RewardDistributor.sol";
 import {SpoolStaking} from "spool/SpoolStaking.sol";
 import {SpoolStakingMigration} from "../src/upgrade/SpoolStakingMigration.sol";
@@ -23,6 +23,8 @@ import {sYLAY, IsYLAY} from "../src/sYLAY.sol";
 import {sYLAYRewards} from "../src/sYLAYRewards.sol";
 import {YelayMigrator} from "../src/YelayMigrator.sol";
 import {YelayStaking} from "../src/YelayStaking.sol";
+import {YelayRewardDistributor} from "../src/YelayRewardDistributor.sol";
+import {ConversionLib} from "../src/libraries/ConversionLib.sol";
 
 contract YelayMigratorTest is Test {
     address owner = address(0x01);
@@ -50,6 +52,7 @@ contract YelayMigratorTest is Test {
     sYLAYRewards sYlayRewards;
     YelayMigrator yelayMigrator;
     YelayStaking yelayStaking;
+    YelayRewardDistributor yelayRewardDistributor;
 
     function setUp() external {
         vm.warp(1726571314);
@@ -112,6 +115,7 @@ contract YelayMigratorTest is Test {
         address yelayStakingAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 7);
         address sYlayImpl = vm.computeCreateAddress(owner, vm.getNonce(owner) + 8);
         address sYlayAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 9);
+        address yelayRewardDistributorAddr = vm.computeCreateAddress(owner, vm.getNonce(owner) + 10);
 
         new YLAY(yelayOwner, yelayMigratorAddr);
         ylay = YLAY(address(new ERC1967Proxy(ylayImpl, "")));
@@ -136,8 +140,7 @@ contract YelayMigratorTest is Test {
             address(ylay),
             address(sYlayAddr),
             address(sYlayRewards),
-            // TODO: add RewardDistributor
-            address(0x11),
+            yelayRewardDistributorAddr,
             address(spoolStaking),
             yelayMigratorAddr
         );
@@ -150,6 +153,9 @@ contract YelayMigratorTest is Test {
         assert(address(sYlay) == sYlayAddr);
         assert(sYlay.migrator() == yelayMigratorAddr);
 
+        yelayRewardDistributor = new YelayRewardDistributor(yelayOwner);
+        assert(address(yelayRewardDistributor) == yelayRewardDistributorAddr);
+
         sYlay.setGradualMinter(address(yelayStaking), true);
         ylay.initialize();
 
@@ -157,14 +163,15 @@ contract YelayMigratorTest is Test {
     }
 
     function test_scenario() external {
-        vm.assertEq(voSpool.getTrancheIndex(block.timestamp), 1);
+        uint256 startingBlockTimestamp = block.timestamp;
+        vm.assertEq(voSpool.getTrancheIndex(startingBlockTimestamp), 1);
 
         vm.startPrank(user1);
         spool.approve(address(spoolStaking), type(uint256).max);
         spoolStaking.stake(user1Stake1);
         vm.stopPrank();
 
-        vm.warp(block.timestamp + 4 weeks);
+        vm.warp(startingBlockTimestamp + 4 weeks);
 
         vm.assertEq(voSpool.getTrancheIndex(block.timestamp), 5);
 
@@ -172,7 +179,7 @@ contract YelayMigratorTest is Test {
         spoolStaking.stake(user1Stake2);
         vm.stopPrank();
 
-        vm.warp(block.timestamp + 5 weeks);
+        vm.warp(startingBlockTimestamp + 9 weeks);
 
         vm.assertEq(voSpool.getTrancheIndex(block.timestamp), 10);
 
@@ -181,7 +188,7 @@ contract YelayMigratorTest is Test {
         spoolStaking.stake(user2Stake);
         vm.stopPrank();
 
-        vm.warp(block.timestamp + 148 weeks);
+        vm.warp(startingBlockTimestamp + 157 weeks);
 
         vm.assertEq(voSpool.getTrancheIndex(block.timestamp), 158);
 
@@ -272,128 +279,58 @@ contract YelayMigratorTest is Test {
         uint256 user1YlayBalanceAfterRewards = ylay.balanceOf(user1);
         uint256 user2YlayBalanceAfterRewards = ylay.balanceOf(user2);
 
-        // check rewards
+        // check rewards with precalculated ones
         assertEq((user1YlayBalanceAfterRewards - user1YlayBalanceBeforeRewards) / 10 ** 16, 27221_69 + 74389_30);
         assertEq((user2YlayBalanceAfterRewards - user2YlayBalanceBeforeRewards) / 10 ** 16, 15910_17 + 36324_99);
 
-        assertApproxEqAbs(yelayStaking.balances(user1), 10_000e18, 10000);
-        assertEq(yelayStaking.balances(user2) / 10 ** 16, 6428_57);
+        uint256 user1StakingBalance = yelayStaking.balances(user1);
+        uint256 user2StakingBalance = yelayStaking.balances(user2);
+        assertEq(user1StakingBalance, ConversionLib.convert(spoolStaking.balances(user1)));
+        assertEq(user2StakingBalance, ConversionLib.convert(spoolStaking.balances(user2)));
 
-        // TODO: balances are slightly less than voting power!
-        // voting power does not grow with the time
-        // voting power equals the maximum so it should be less!
-        // seems
-        console.log("Stake balances");
-        console.log(yelayStaking.balances(user1));
-        console.log(yelayStaking.balances(user2));
+        assertLt(sYlay.getUserGradualVotingPower(user1), user1StakingBalance);
+        assertLt(sYlay.getUserGradualVotingPower(user2), user2StakingBalance);
 
-        console.log("Voting power Yelay");
-        console.log(sYlay.getUserGradualVotingPower(user1));
-        console.log(sYlay.getUserGradualVotingPower(user2));
+        {
+            // user1 had his 2 stake on week 5, so on week 213 it should be fully matured
+            vm.warp(startingBlockTimestamp + 211 weeks);
+            assertEq(sYlay.getCurrentTrancheIndex(), 212);
+            assertLt(sYlay.getUserGradualVotingPower(user1), user1StakingBalance);
 
-        // TODO: Only after 55 weeks it will get 100% mature, why?
-        // vm.warp(block.timestamp + 55 weeks);
-        vm.warp(block.timestamp + 80 weeks);
+            vm.warp(startingBlockTimestamp + 212 weeks);
+            assertEq(sYlay.getCurrentTrancheIndex(), 213);
+            assertGe(sYlay.getUserGradualVotingPower(user1), user1StakingBalance);
+        }
 
-        // TODO: shouldn't it be equal to FULL_POWER_TRANCHES_COUNT ?
-        // vm.assertEq(sYlay.getTrancheIndex(block.timestamp), 52 * 4);
+        {
+            // user2 had only 1 stake on week 10, so on week 218 it should be fully matured
+            vm.warp(startingBlockTimestamp + 216 weeks);
+            assertEq(sYlay.getCurrentTrancheIndex(), 217);
+            assertLt(sYlay.getUserGradualVotingPower(user2), user2StakingBalance);
 
-        // console.log("Voting power Yelay");
-        console.log(sYlay.getUserGradualVotingPower(user1));
-        console.log(sYlay.getUserGradualVotingPower(user2));
+            vm.warp(startingBlockTimestamp + 217 weeks);
+            assertEq(sYlay.getCurrentTrancheIndex(), 218);
+            assertGe(sYlay.getUserGradualVotingPower(user2), user2StakingBalance);
+        }
 
-        // console.log("voSpool indexedGlobalTranches");
-        // {
-        //     (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
-        //         voSpool.indexedGlobalTranches(0);
-        //     console.log("0 index");
-        //     console.log(zero.amount);
-        //     console.log(one.amount);
-        //     console.log(two.amount);
-        //     console.log(three.amount);
-        //     console.log(four.amount);
-        // }
-        // {
-        //     (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
-        //         voSpool.indexedGlobalTranches(1);
-        //     console.log("1 index");
-        //     console.log(zero.amount);
-        //     console.log(one.amount);
-        //     console.log(two.amount);
-        //     console.log(three.amount);
-        //     console.log(four.amount);
-        // }
-        // {
-        //     (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
-        //         voSpool.indexedGlobalTranches(2);
-        //     console.log("2 index");
-        //     console.log(zero.amount);
-        //     console.log(one.amount);
-        //     console.log(two.amount);
-        //     console.log(three.amount);
-        //     console.log(four.amount);
-        // }
+        _checkGlobalTranche(0);
+        _checkGlobalTranche(1);
+        _checkGlobalTranche(2);
+        _checkGlobalTranche(3);
 
-        // console.log("sYLAY indexedGlobalTranches");
-        // {
-        //     (
-        //         sYLAY.Tranche memory zero,
-        //         sYLAY.Tranche memory one,
-        //         sYLAY.Tranche memory two,
-        //         sYLAY.Tranche memory three,
-        //         sYLAY.Tranche memory four
-        //     ) = sYlay.indexedGlobalTranches(0);
-        //     console.log("0 index");
-        //     console.log(zero.amount);
-        //     console.log(one.amount);
-        //     console.log(two.amount);
-        //     console.log(three.amount);
-        //     console.log(four.amount);
-        // }
-        // {
-        //     (
-        //         sYLAY.Tranche memory zero,
-        //         sYLAY.Tranche memory one,
-        //         sYLAY.Tranche memory two,
-        //         sYLAY.Tranche memory three,
-        //         sYLAY.Tranche memory four
-        //     ) = sYlay.indexedGlobalTranches(1);
-        //     console.log("1 index");
-        //     console.log(zero.amount);
-        //     console.log(one.amount);
-        //     console.log(two.amount);
-        //     console.log(three.amount);
-        //     console.log(four.amount);
-        // }
-        // {
-        //     (
-        //         sYLAY.Tranche memory zero,
-        //         sYLAY.Tranche memory one,
-        //         sYLAY.Tranche memory two,
-        //         sYLAY.Tranche memory three,
-        //         sYLAY.Tranche memory four
-        //     ) = sYlay.indexedGlobalTranches(2);
-        //     console.log("2 index");
-        //     console.log(zero.amount);
-        //     console.log(one.amount);
-        //     console.log(two.amount);
-        //     console.log(three.amount);
-        //     console.log(four.amount);
-        // }
-        // {
-        //     (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
-        //         sYlay.indexedGlobalTranches(0);
-        //     console.log(zero.amount);
-        //     console.log(one.amount);
-        //     console.log(two.amount);
-        //     console.log(three.amount);
-        //     console.log(four.amount);
-        // }
-        // console.log(voSpool.indexedGlobalTranches(0));
-        // console.log(sYlay.indexedGlobalTranches(0));
+        _checkUserTranche(0, user1);
+        _checkUserTranche(1, user1);
+        _checkUserTranche(2, user1);
+        _checkUserTranche(3, user1);
+
+        _checkUserTranche(0, user2);
+        _checkUserTranche(1, user2);
+        _checkUserTranche(2, user2);
+        _checkUserTranche(3, user2);
 
         assertGt(ylay.balanceOf(address(yelayStaking)), 0);
 
+        // unstaking part
         {
             // user can unstake the whole balance
             uint256 stakeBalance = yelayStaking.balances(user1);
@@ -413,10 +350,69 @@ contract YelayMigratorTest is Test {
             assertEq(sYlay.getUserGradualVotingPower(user1), 0);
         }
 
+        // new staking part
+        uint256 user2SecondStake = 100e18;
+        vm.startPrank(user2);
+        ylay.approve(address(yelayStaking), type(uint256).max);
+        yelayStaking.stake(user2SecondStake);
+        vm.stopPrank();
+
+        assertEq(yelayStaking.balances(user2), user2StakingBalance + user2SecondStake);
+
+        vm.warp(block.timestamp + 207 weeks);
+        assertLt(sYlay.getUserGradualVotingPower(user2), yelayStaking.balances(user2));
+        vm.warp(block.timestamp + 1 weeks);
+        assertGe(sYlay.getUserGradualVotingPower(user2), yelayStaking.balances(user2));
+
         vm.startPrank(user2);
         yelayStaking.unstake(yelayStaking.balances(user2));
         vm.stopPrank();
 
         assertEq(ylay.balanceOf(address(yelayStaking)), 0);
+
+        vm.startPrank(user2);
+        yelayStaking.stake(user2SecondStake);
+        vm.stopPrank();
+
+        assertEq(yelayStaking.balances(user2), user2SecondStake);
+        vm.warp(block.timestamp + 208 weeks);
+        assertEq(sYlay.getUserGradualVotingPower(user2), yelayStaking.balances(user2));
+    }
+
+    function _checkGlobalTranche(uint256 index) internal {
+        (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
+            voSpool.indexedGlobalTranches(index);
+        (
+            sYLAY.Tranche memory zero_,
+            sYLAY.Tranche memory one_,
+            sYLAY.Tranche memory two_,
+            sYLAY.Tranche memory three_,
+            sYLAY.Tranche memory four_
+        ) = sYlay.indexedGlobalTranches(index);
+        assertEq(ConversionLib.convertPower(zero.amount), zero_.amount);
+        assertEq(ConversionLib.convertPower(one.amount), one_.amount);
+        assertEq(ConversionLib.convertPower(two.amount), two_.amount);
+        assertEq(ConversionLib.convertPower(three.amount), three_.amount);
+        assertEq(ConversionLib.convertPower(four.amount), four_.amount);
+    }
+
+    function _checkUserTranche(uint256 index, address user) internal {
+        (UserTranche memory zero, UserTranche memory one, UserTranche memory two, UserTranche memory three) =
+            voSpool.userTranches(user, index);
+        (
+            sYLAY.UserTranche memory zero_,
+            sYLAY.UserTranche memory one_,
+            sYLAY.UserTranche memory two_,
+            sYLAY.UserTranche memory three_
+        ) = sYlay.userTranches(user, index);
+        assertEq(ConversionLib.convertPower(zero.amount), zero_.amount);
+        assertEq(ConversionLib.convertPower(one.amount), one_.amount);
+        assertEq(ConversionLib.convertPower(two.amount), two_.amount);
+        assertEq(ConversionLib.convertPower(three.amount), three_.amount);
+
+        assertEq(zero.index, zero_.index);
+        assertEq(one.index, one_.index);
+        assertEq(two.index, two_.index);
+        assertEq(three.index, three_.index);
     }
 }

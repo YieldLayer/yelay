@@ -20,7 +20,7 @@ import "./interfaces/IRewardDistributor.sol";
  *
  * The contract is pausable by the Yelay or the pauser.
  */
-contract RewardDistributor is Pausable, YelayOwnable, IRewardDistributor {
+contract YelayRewardDistributor is Pausable, YelayOwnable, IRewardDistributor {
     using SafeERC20 for IERC20;
 
     /* ========== STATE VARIABLES ========== */

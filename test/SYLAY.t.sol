@@ -11,10 +11,11 @@ import {MockToken} from "test/mocks/MockToken.sol";
 import "test/shared/Utilities.sol";
 import "src/YLAY.sol";
 import {VoSPOOL} from "spool/VoSPOOL.sol";
-import {RewardDistributor} from "spool/RewardDistributor.sol";
 import {SpoolStaking} from "spool/SpoolStaking.sol";
 import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
+import {sYLAYRewards} from "src/sYLAYRewards.sol";
 import {YelayOwner} from "src/YelayOwner.sol";
+import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
 import {YelayStaking} from "src/YelayStaking.sol";
 import "src/YelayMigrator.sol";
 import "src/libraries/ConversionLib.sol";
@@ -31,7 +32,7 @@ contract SYLAYTest is Test, Utilities {
     ISpoolOwner spoolOwner;
     YLAY yLAY;
     sYLAY sYlay;
-    RewardDistributor rewardDistributor;
+    YelayRewardDistributor rewardDistributor;
     YelayStaking yelayStaking;
     YelayMigrator yelayMigrator;
 
@@ -67,8 +68,9 @@ contract SYLAYTest is Test, Utilities {
         address precomputedYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 2);
         address precomputedSYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 3);
         address precomputedRewardDistributorAddress = vm.computeCreateAddress(deployer, deployerNonce + 4);
-        address precomputedYelayStakingAddress = vm.computeCreateAddress(deployer, deployerNonce + 5);
-        address precomputedMigratorAddress = vm.computeCreateAddress(deployer, deployerNonce + 6);
+        address precomputedsYLAYRewardsAddress = vm.computeCreateAddress(deployer, deployerNonce + 5);
+        address precomputedYelayStakingAddress = vm.computeCreateAddress(deployer, deployerNonce + 6);
+        address precomputedMigratorAddress = vm.computeCreateAddress(deployer, deployerNonce + 7);
 
         // Step 2: Deploy SpoolOwner at precomputedYLAYAddress
         spoolOwner = new SpoolOwner();
@@ -84,16 +86,17 @@ contract SYLAYTest is Test, Utilities {
         assert(address(sYlay) == precomputedSYLAYAddress);
 
         // Step 5: Deploy RewardDistributor at precomputedRewardDistributorAddress
-        rewardDistributor = new RewardDistributor(spoolOwner);
+        rewardDistributor = new YelayRewardDistributor(yelayOwner);
         assert(address(rewardDistributor) == precomputedRewardDistributorAddress);
+
+        new sYLAYRewards(precomputedYelayStakingAddress, address(sYlay), address(yelayOwner));
 
         // Step 6: Deploy YelayStaking at precomputedYelayStakingAddress
         yelayStaking = new YelayStaking(
             address(spoolOwner),
             address(yLAY),
             address(sYlay),
-            // TODO: add sYlayRewards
-            address(0x10),
+            address(precomputedsYLAYRewardsAddress),
             address(rewardDistributor),
             address(spoolStaking),
             precomputedMigratorAddress
@@ -644,14 +647,6 @@ contract SYLAYTest is Test, Utilities {
 
         // Global gradual
         globalGradual = sYlay.getGlobalGradual();
-        console.log("totalMaturingAmountBefore");
-        console.log(totalMaturingAmountBefore);
-        console.log("globalGradual.totalMaturingAmount");
-        console.log(globalGradual.totalMaturingAmount);
-        console.log("userAmountTrimmed");
-        console.log(userAmountTrimmed);
-        // console.log(globalGradual.totalMaturingAmount + userAmountTrimmed);
-        // TODO: something has changed here!
         assertEq(globalGradual.totalMaturingAmount, totalMaturingAmountBefore + userAmountTrimmed);
     }
 

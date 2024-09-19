@@ -12,7 +12,7 @@ import "test/shared/Utilities.sol";
 import {YLAY} from "src/YLAY.sol";
 import {YelayOwner} from "src/YelayOwner.sol";
 import {sYLAYRewards} from "src/sYLAYRewards.sol";
-import {RewardDistributor} from "src/RewardDistributor.sol";
+import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
 import {VoSPOOL, IVoSPOOL} from "spool/VoSPOOL.sol";
 import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
 import {YelayStaking, IERC20} from "src/YelayStaking.sol";
@@ -30,7 +30,7 @@ contract YelayStakingTest is Test, Utilities {
     YelayOwner yelayOwner;
     YLAY yLAY;
     sYLAY sYlay;
-    RewardDistributor rewardDistributor;
+    YelayRewardDistributor rewardDistributor;
     YelayStaking yelayStaking;
     YelayMigrator yelayMigrator;
     sYLAYRewards sYlayRewards;
@@ -82,8 +82,8 @@ contract YelayStakingTest is Test, Utilities {
         sYlay = new sYLAY(address(yelayOwner), address(voSPOOL), precomputedMigratorAddress);
         assert(address(sYlay) == precomputedSYLAYAddress);
 
-        // Step 5: Deploy RewardDistributor at precomputedRewardDistributorAddress
-        rewardDistributor = new RewardDistributor(yelayOwner);
+        // Step 5: Deploy YelayRewardDistributor at precomputedRewardDistributorAddress
+        rewardDistributor = new YelayRewardDistributor(yelayOwner);
         assert(address(rewardDistributor) == precomputedRewardDistributorAddress);
 
         // Step 6: Deploy YelayStaking at precomputedYelayStakingAddress
