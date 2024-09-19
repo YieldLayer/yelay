@@ -5,7 +5,6 @@ import "openzeppelin-contracts-upgradeable/security/ReentrancyGuardUpgradeable.s
 import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./YelayOwnable.sol";
-
 import "./libraries/SafeCast.sol";
 
 import "./interfaces/IYelayStakingBase.sol";

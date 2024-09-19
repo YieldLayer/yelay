@@ -14,7 +14,7 @@ import {IERC20} from "spool/external/@openzeppelin/token/ERC20/IERC20.sol";
 import {VoSPOOL, Tranche} from "spool/VoSPOOL.sol";
 import {RewardDistributor} from "spool/RewardDistributor.sol";
 import {SpoolStaking} from "spool/SpoolStaking.sol";
-import {SpoolStaking2} from "../src/upgrade/SpoolStaking2.sol";
+import {SpoolStakingMigration} from "../src/upgrade/SpoolStakingMigration.sol";
 import {VoSpoolRewards, VoSpoolRewardUser} from "spool/VoSpoolRewards.sol";
 
 import {YLAY} from "../src/YLAY.sol";
@@ -89,7 +89,6 @@ contract YelayMigratorTest is Test {
         spool.transfer(address(rewardDistributor), 2_000_000e18);
 
         voSpool.setGradualMinter(address(spoolStaking), true);
-        // TODO: need to set minter as well? https://etherscan.io/address/0x08772c1872c997Fec8dA3c7f36C1FC28EBE72E97#code
 
         voSpoolRewards.updateVoSpoolRewardRate(14, 184615384615384615384615);
 
@@ -242,7 +241,7 @@ contract YelayMigratorTest is Test {
         proxyAdmin.upgrade(
             TransparentUpgradeableProxy(payable(address(spoolStaking))),
             address(
-                new SpoolStaking2(
+                new SpoolStakingMigration(
                     address(spool),
                     address(voSpool),
                     address(voSpoolRewards),

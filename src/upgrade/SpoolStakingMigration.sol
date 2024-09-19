@@ -3,7 +3,7 @@ pragma solidity 0.8.13;
 
 import "spool/SpoolStaking.sol";
 
-contract SpoolStaking2 is SpoolStaking {
+contract SpoolStakingMigration is SpoolStaking {
     constructor(
         address _stakingToken,
         address _voSpool,

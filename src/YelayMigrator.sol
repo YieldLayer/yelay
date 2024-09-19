@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.13;
 
 import "./YelayOwnable.sol";
-import "src/libraries/ConversionLib.sol";
+import "./libraries/ConversionLib.sol";
 
 import "./interfaces/IERC20PausableOwnable.sol";
 import "./interfaces/IsYLAY.sol";
@@ -115,16 +114,6 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
         // Transfer the cumulative staking balance to the yelayStaking contract
         YLAY.claim(address(yelayStaking), yelayToStake);
     }
-
-    // /**
-    //  * @notice Allows a single user to migrate their staked SPOOL to Yelay staking.
-    //  */
-    // function migrateStake() external onlyOwner spoolDisabled {
-    //     uint256 yelayToStake = _migrateStake(msg.sender);
-
-    //     // Transfer the staking balance to the yelayStaking contract
-    //     YLAY.claim(address(yelayStaking), yelayToStake);
-    // }
 
     /* ========== INTERNAL FUNCTIONS ========== */
 

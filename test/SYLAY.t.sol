@@ -107,7 +107,6 @@ contract SYLAYTest is Test, Utilities {
         yLAY.initialize();
         yelayStaking.initialize();
 
-        // TODO:
         sYlay.initialize();
 
         rewardToken1 = IERC20(new MockToken("TEST", "TEST"));

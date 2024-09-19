@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.13;
 
-// import "src/external/spool-staking-and-voting/SpoolStaking.sol";
 import "src/interfaces/IsYLAY.sol";
 import "src/libraries/ConversionLib.sol";
 
-import "forge-std/console.sol";
-
-import {SpoolStaking2} from "./upgrade/SpoolStaking2.sol";
+import {SpoolStakingMigration} from "./upgrade/SpoolStakingMigration.sol";
 import {YelayStakingBase, IERC20} from "./YelayStakingBase.sol";
 
 contract YelayStaking is YelayStakingBase {
@@ -18,17 +14,30 @@ contract YelayStaking is YelayStakingBase {
     IsYLAY public immutable sYLAY;
 
     /// @notice The SpoolStaking contract, used for migration purposes.
-    // TODO: type
+    /// @dev to avoid type conflicts we are using YelayStakingBase type
     YelayStakingBase public immutable spoolStaking;
-
-    /// @notice The total amount of SPOOL tokens that have been migrated to YLAY staking.
-    uint256 private _totalStakedSPOOLMigrated;
 
     /// @notice The ERC20 interface for the SPOOL token used for spool staking.
     IERC20 public immutable SPOOL;
 
     /// @notice The address of the migrator contract responsible for migration.
     address public immutable migrator;
+
+    /// @custom:storage-location erc7201:yelay.storage.YelayStakingMigrationStorage
+    struct YelayStakingMigrationStorage {
+        /// @notice The total amount of SPOOL tokens that have been migrated to YLAY staking.
+        uint256 totalStakedSPOOLMigrated;
+    }
+
+    // keccak256(abi.encode(uint256(keccak256("yelay.storage.YelayStakingMigrationStorage")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant YelayStakingMigrationStorageLocation =
+        0xd6ec7526d524b9a0339cbaaaa5c4eb68e37db8ea1da620fd04e68951a2d0ff00;
+
+    function _getYelayStakingMigrationStorageLocation() private pure returns (YelayStakingMigrationStorage storage $) {
+        assembly {
+            $.slot := YelayStakingMigrationStorageLocation
+        }
+    }
 
     /* ========== CONSTRUCTOR ========== */
 
@@ -50,11 +59,6 @@ contract YelayStaking is YelayStakingBase {
         address _spoolStaking,
         address _migrator
     ) YelayStakingBase(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _yelayOwner) {
-        // IERC20 _stakingToken,
-        // IVoSPOOL _voSpool,
-        // IVoSpoolRewards _voSpoolRewards,
-        // IRewardDistributor _rewardDistributor,
-        // ISpoolOwner _spoolOwner
         sYLAY = IsYLAY(_sYLAY);
         spoolStaking = YelayStakingBase(_spoolStaking);
         SPOOL = IERC20(address(spoolStaking.stakingToken()));
@@ -73,23 +77,17 @@ contract YelayStaking is YelayStakingBase {
      */
     function migrateUser(address user) external onlyMigrator returns (uint256 yelayStaked, uint256 yelayRewards) {
         uint256 spoolStaked = spoolStaking.balances(user);
-        // console.log(spoolStaked);
         yelayStaked = ConversionLib.convert(spoolStaked);
 
+        YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
         unchecked {
-            _totalStakedSPOOLMigrated += spoolStaked;
+            $.totalStakedSPOOLMigrated += spoolStaked;
         }
 
         _migrateUser(user, yelayStaked);
 
-        // Handle staking rewards migration.
-        // Note: voSPOOL rewards are not migrated. Upgrades to SpoolStaking/voSPOOLRewards are needed for full reward migration.
         uint256 userSpoolRewards = spoolStaking.earned(SPOOL, user);
-        uint256 userVoSpoolRewards = SpoolStaking2(address(spoolStaking)).getUpdatedVoSpoolRewardAmount(user);
-        // console.log("userSpoolRewards");
-        // console.log(userSpoolRewards);
-        // console.log("userVoSpoolRewards");
-        // console.log(userVoSpoolRewards);
+        uint256 userVoSpoolRewards = SpoolStakingMigration(address(spoolStaking)).getUpdatedVoSpoolRewardAmount(user);
         yelayRewards = ConversionLib.convert(userSpoolRewards + userVoSpoolRewards);
     }
 
@@ -147,7 +145,17 @@ contract YelayStaking is YelayStakingBase {
      * @return True if the migration is complete, false otherwise.
      */
     function migrationComplete() external view returns (bool) {
-        return _totalStakedSPOOLMigrated == spoolStaking.totalStaked();
+        YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
+        return $.totalStakedSPOOLMigrated == spoolStaking.totalStaked();
+    }
+
+    /**
+     * @dev Returns amount of SPOOL tokens have been migrated to YLAY.
+     * @return amount of totalStakedSPOOLMigrated
+     */
+    function getTotalStakedSPOOLMigrated() external view returns (uint256) {
+        YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
+        return $.totalStakedSPOOLMigrated;
     }
 
     /* ========== MODIFIERS ========== */
