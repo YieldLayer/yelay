@@ -236,6 +236,7 @@ contract YelayMigratorTest is Test {
             vm.stopPrank();
             vm.assertEq(sYlay.getTrancheIndex(block.timestamp), 158);
         }
+        assertFalse(sYlay.migrationComplete());
 
         vm.startPrank(owner);
         proxyAdmin.upgrade(
@@ -252,8 +253,7 @@ contract YelayMigratorTest is Test {
         );
         vm.stopPrank();
 
-        // spoolStaking = SpoolStaking(address(new TransparentUpgradeableProxy(spoolStakingImpl, address(proxyAdmin), "")));
-
+        assertFalse(yelayStaking.migrationComplete());
         // owner of Yelay can migrate for user
         {
             vm.startPrank(owner);
@@ -267,6 +267,7 @@ contract YelayMigratorTest is Test {
             yelayMigrator.migrateStake(claimants);
             vm.stopPrank();
         }
+        assertTrue(yelayStaking.migrationComplete());
 
         uint256 user1YlayBalanceAfterRewards = ylay.balanceOf(user1);
         uint256 user2YlayBalanceAfterRewards = ylay.balanceOf(user2);
@@ -277,8 +278,6 @@ contract YelayMigratorTest is Test {
 
         assertApproxEqAbs(yelayStaking.balances(user1), 10_000e18, 10000);
         assertEq(yelayStaking.balances(user2) / 10 ** 16, 6428_57);
-
-        // console.log(sYlay.getLastFinishedTrancheIndex());
 
         // TODO: balances are slightly less than voting power!
         // voting power does not grow with the time
@@ -419,85 +418,5 @@ contract YelayMigratorTest is Test {
         vm.stopPrank();
 
         assertEq(ylay.balanceOf(address(yelayStaking)), 0);
-
-        // uint256 user1Balance = spool.balanceOf(user1);
-
-        // user1Balance += spoolRewardsUser1;
-
-        // {
-        //     vm.startPrank(user2);
-        //     uint256 earned = spoolStaking.getUpdatedVoSpoolRewardAmount();
-        //     console.log(earned / 10 ** 12);
-        //     vm.stopPrank();
-        //     user1Balance += earned;
-        // }
-
-        // console.log(spoolStaking.earned(IERC20(address(spool)), user1));
-        // console.log(spoolStaking.earned(IERC20(address(spool)), user2));
-
-        // {
-        //     IERC20[] memory tokens = new IERC20[](1);
-        //     tokens[0] = IERC20(address(spool));
-        //     vm.startPrank(user1);
-        //     spoolStaking.getRewards(tokens, true);
-        //     vm.stopPrank();
-        // }
-
-        // assertEq(spool.balanceOf(user1), user1Balance);
-        // {
-        //     IERC20[] memory tokens = new IERC20[](1);
-        //     tokens[0] = IERC20(address(spool));
-        //     vm.startPrank(user2);
-        //     spoolStaking.getRewards(tokens, false);
-        //     vm.stopPrank();
-        // }
-
-        // {
-        //    ( uint48 maturedVotingPower,
-        //     uint48 maturingAmount,
-        //     uint56 rawUnmaturedVotingPower,
-        //     UserTranchePosition oldestTranchePosition,
-        //     UserTranchePosition latestTranchePosition,
-        //     uint16 lastUpdatedTrancheIndex) = voSpool.getUserGradual();
-        // }
-
-        // console.log("==========");
-        // console.log(spool.balanceOf(user1));
-        // console.log(spoolStaking.balances(user1));
-        // console.log(spoolStaking.earned(IERC20(address(spool)), user1));
-        // {
-        //     (uint8 lastRewardRateIndex, uint248 earned) = voSpoolRewards.userRewards(user1);
-        //     console.log(lastRewardRateIndex);
-        //     console.log(earned);
-        // }
-
-        // console.log("==========");
-        // console.log(spool.balanceOf(user1));
-        // console.log(spoolStaking.balances(user1));
-        // console.log(spoolStaking.earned(IERC20(address(spool)), user1));
-        // {
-        //     (uint8 lastRewardRateIndex, uint248 earned) = voSpoolRewards.userRewards(user1);
-        //     console.log(lastRewardRateIndex);
-        //     console.log(earned);
-        // }
-
-        // vm.startPrank(user1);
-        // spoolStaking.compound(true);
-        // vm.stopPrank();
-
-        // console.log("==========");
-        // console.log(spool.balanceOf(user1));
-        // console.log(spoolStaking.balances(user1));
-        // console.log(spoolStaking.earned(IERC20(address(spool)), user1));
-        // {
-        //     (uint8 lastRewardRateIndex, uint248 earned) = voSpoolRewards.userRewards(user1);
-        //     console.log(lastRewardRateIndex);
-        //     console.log(earned);
-        // }
-
-        // vm.startPrank(user2);
-        // spool.approve(address(spoolStaking), type(uint256).max);
-        // spoolStaking.stake(user2Stake);
-        // vm.stopPrank();
     }
 }
