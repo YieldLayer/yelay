@@ -23,6 +23,14 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
         uint256 lastGlobalIndexVoSPOOLMigrated;
         /// @dev the last global tranche index from VoSPOOL to be migrated.
         uint256 lastGlobalIndexVoSPOOL;
+        /// @notice The total amount of instant power migrated
+        uint256 totalInstantPowerMigrated;
+        /// @notice The total amount of instant power to migrate
+        uint256 totalInstantPowerToMigrate;
+        /// @notice The total maturing amount migrated
+        uint256 totalMaturingAmountMigrated;
+        /// @notice The total maturing amount to migrate
+        uint256 totalMaturingAmountToMigrate;
         /// @dev flag to allow migration
         bool initialized;
     }
@@ -67,8 +75,11 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
         );
 
         totalInstantPower = ConversionLib.convert(voSPOOL.totalInstantPower());
+
         sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
         $.lastGlobalIndexVoSPOOL = voSPOOL.getLastFinishedTrancheIndex();
+        $.totalInstantPowerToMigrate = voSPOOL.totalInstantPower();
+        $.totalMaturingAmountToMigrate = voGlobalGradual.totalMaturingAmount;
         $.initialized = true;
     }
 
@@ -104,10 +115,9 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
     function migrateUser(address user) external migrationInProgress onlyMigrator {
         sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
         _whenInitialized($);
-        // TODO: cover this in test
-        userInstantPower[user] = ConversionLib.convert(voSPOOL.userInstantPower(user));
+        uint256 userPower = voSPOOL.userInstantPower(user);
+        userInstantPower[user] = ConversionLib.convert(userPower);
         UserGradual memory userGradual = voSPOOL.getNotUpdatedUserGradual(user);
-        // UserGradual memory userGradual = voSPOOL.getUserGradual(user);
 
         // Store user gradual information
         _userGraduals[user] = UserGradual(
@@ -118,6 +128,11 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
             userGradual.latestTranchePosition,
             userGradual.lastUpdatedTrancheIndex
         );
+
+        unchecked {
+            $.totalInstantPowerMigrated += userPower;
+            $.totalMaturingAmountMigrated += userGradual.maturingAmount;
+        }
 
         // Migrate user's tranches
         uint256 fromIndex = userGradual.oldestTranchePosition.arrayIndex;
@@ -202,7 +217,8 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
      */
     function _migrationInProgressInternal() private view returns (bool) {
         sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
-        return getLastFinishedTrancheIndex() == $.lastGlobalIndexVoSPOOL;
+        return $.totalInstantPowerMigrated != $.totalInstantPowerToMigrate
+            || $.totalMaturingAmountMigrated != $.totalMaturingAmountToMigrate;
     }
 
     /**

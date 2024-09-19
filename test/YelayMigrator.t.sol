@@ -30,6 +30,11 @@ contract YelayMigratorTest is Test {
     address owner = address(0x01);
     address user1 = address(0x02);
     address user2 = address(0x03);
+    address user3 = address(0x04);
+    address user4 = address(0x05);
+
+    uint256 user3InitialInstantPower = 70e18;
+    uint256 user4InitialInstantPower = 20e18;
 
     uint256 user1Balance = 10_000e18;
     uint256 user1Stake1 = 1000e18;
@@ -157,12 +162,22 @@ contract YelayMigratorTest is Test {
         assert(address(yelayRewardDistributor) == yelayRewardDistributorAddr);
 
         sYlay.setGradualMinter(address(yelayStaking), true);
+        voSpool.setMinter(address(this), true);
+
         ylay.initialize();
 
         vm.stopPrank();
     }
 
-    function test_scenario() external {
+    function test_migrationScenario() external {
+        voSpool.mint(user3, user3InitialInstantPower);
+        voSpool.mint(user4, user4InitialInstantPower);
+
+        assertEq(voSpool.userInstantPower(user3), user3InitialInstantPower);
+        assertEq(voSpool.userInstantPower(user4), user4InitialInstantPower);
+        assertEq(voSpool.totalInstantPower(), user3InitialInstantPower + user4InitialInstantPower);
+        assertEq(voSpool.totalSupply(), user3InitialInstantPower + user4InitialInstantPower);
+
         uint256 startingBlockTimestamp = block.timestamp;
         vm.assertEq(voSpool.getTrancheIndex(startingBlockTimestamp), 1);
 
@@ -181,7 +196,7 @@ contract YelayMigratorTest is Test {
 
         vm.warp(startingBlockTimestamp + 9 weeks);
 
-        vm.assertEq(voSpool.getTrancheIndex(block.timestamp), 10);
+        assertEq(voSpool.getTrancheIndex(block.timestamp), 10);
 
         vm.startPrank(user2);
         spool.approve(address(spoolStaking), type(uint256).max);
@@ -243,6 +258,7 @@ contract YelayMigratorTest is Test {
             vm.stopPrank();
             vm.assertEq(sYlay.getTrancheIndex(block.timestamp), 158);
         }
+        assertFalse(yelayStaking.migrationComplete());
         assertFalse(sYlay.migrationComplete());
 
         vm.startPrank(owner);
@@ -261,6 +277,8 @@ contract YelayMigratorTest is Test {
         vm.stopPrank();
 
         assertFalse(yelayStaking.migrationComplete());
+        assertFalse(sYlay.migrationComplete());
+
         // owner of Yelay can migrate for user
         {
             vm.startPrank(owner);
@@ -275,6 +293,44 @@ contract YelayMigratorTest is Test {
             vm.stopPrank();
         }
         assertTrue(yelayStaking.migrationComplete());
+        assertFalse(sYlay.migrationComplete());
+
+        {
+            vm.startPrank(owner);
+            address[] memory claimants = new address[](2);
+            claimants[0] = user3;
+            claimants[1] = user4;
+            yelayMigrator.migrateStake(claimants);
+            vm.stopPrank();
+        }
+
+        assertTrue(yelayStaking.migrationComplete());
+        assertTrue(sYlay.migrationComplete());
+
+        assertEq(sYlay.totalInstantPower(), ConversionLib.convert(voSpool.totalInstantPower()));
+        assertApproxEqAbs(
+            sYlay.totalInstantPower(),
+            ConversionLib.convert(voSpool.userInstantPower(user3))
+                + ConversionLib.convert(voSpool.userInstantPower(user4)),
+            1
+        );
+        assertEq(sYlay.userInstantPower(user3), ConversionLib.convert(voSpool.userInstantPower(user3)));
+        assertEq(sYlay.userInstantPower(user4), ConversionLib.convert(voSpool.userInstantPower(user4)));
+
+        _checkGlobalTranche(0);
+        _checkGlobalTranche(1);
+        _checkGlobalTranche(2);
+        _checkGlobalTranche(3);
+
+        _checkUserTranche(0, user1);
+        _checkUserTranche(1, user1);
+        _checkUserTranche(2, user1);
+        _checkUserTranche(3, user1);
+
+        _checkUserTranche(0, user2);
+        _checkUserTranche(1, user2);
+        _checkUserTranche(2, user2);
+        _checkUserTranche(3, user2);
 
         uint256 user1YlayBalanceAfterRewards = ylay.balanceOf(user1);
         uint256 user2YlayBalanceAfterRewards = ylay.balanceOf(user2);
@@ -312,21 +368,6 @@ contract YelayMigratorTest is Test {
             assertEq(sYlay.getCurrentTrancheIndex(), 218);
             assertGe(sYlay.getUserGradualVotingPower(user2), user2StakingBalance);
         }
-
-        _checkGlobalTranche(0);
-        _checkGlobalTranche(1);
-        _checkGlobalTranche(2);
-        _checkGlobalTranche(3);
-
-        _checkUserTranche(0, user1);
-        _checkUserTranche(1, user1);
-        _checkUserTranche(2, user1);
-        _checkUserTranche(3, user1);
-
-        _checkUserTranche(0, user2);
-        _checkUserTranche(1, user2);
-        _checkUserTranche(2, user2);
-        _checkUserTranche(3, user2);
 
         assertGt(ylay.balanceOf(address(yelayStaking)), 0);
 
@@ -379,7 +420,7 @@ contract YelayMigratorTest is Test {
         assertEq(sYlay.getUserGradualVotingPower(user2), yelayStaking.balances(user2));
     }
 
-    function _checkGlobalTranche(uint256 index) internal {
+    function _checkGlobalTranche(uint256 index) internal view {
         (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
             voSpool.indexedGlobalTranches(index);
         (
@@ -396,7 +437,7 @@ contract YelayMigratorTest is Test {
         assertEq(ConversionLib.convertPower(four.amount), four_.amount);
     }
 
-    function _checkUserTranche(uint256 index, address user) internal {
+    function _checkUserTranche(uint256 index, address user) internal view {
         (UserTranche memory zero, UserTranche memory one, UserTranche memory two, UserTranche memory three) =
             voSpool.userTranches(user, index);
         (

@@ -529,7 +529,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
 
         // remove user matured power
         if (_userGradual.maturedVotingPower > 0) {
-            _globalGradual.totalMaturedVotingPower -= _userGradual.maturedVotingPower;
+            _updateTotalMaturedVotingPower(global, _userGradual.maturedVotingPower);
             _userGradual.maturedVotingPower = 0;
         }
 
@@ -1065,6 +1065,9 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         }
     }
 
+    /**
+     * @dev after migration there could be small discrepancy in absolute values
+     */
     function _updateTotalRawUnmaturedVotingPower(GlobalGradual memory global, uint56 newMaturedAsRawUnmatured)
         private
         pure
@@ -1076,14 +1079,31 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         }
     }
 
-    function _updateTotalMaturingAmount(GlobalGradual memory global, uint48 newMaturedVotingPower) private pure {
-        if (global.totalMaturingAmount < newMaturedVotingPower) {
-            global.totalMaturingAmount = 0;
+    /**
+     * @dev after migration there could be small discrepancy in absolute values
+     */
+    function _updateTotalMaturedVotingPower(GlobalGradual memory global, uint48 maturedVotingPower) private pure {
+        if (global.totalMaturedVotingPower < maturedVotingPower) {
+            global.totalMaturedVotingPower = 0;
         } else {
-            global.totalMaturingAmount -= newMaturedVotingPower;
+            global.totalMaturedVotingPower -= maturedVotingPower;
         }
     }
 
+    /**
+     * @dev after migration there could be small discrepancy in absolute values
+     */
+    function _updateTotalMaturingAmount(GlobalGradual memory global, uint48 maturingAmount) private pure {
+        if (global.totalMaturingAmount < maturingAmount) {
+            global.totalMaturingAmount = 0;
+        } else {
+            global.totalMaturingAmount -= maturingAmount;
+        }
+    }
+
+    /**
+     * @dev after migration there could be small discrepancy in absolute values
+     */
     function _updateRawUnmaturedVotingPower(UserGradual memory _userGradual, uint56 newMaturedAsRawUnmatured)
         private
         pure
@@ -1095,6 +1115,9 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         }
     }
 
+    /**
+     * @dev after migration there could be small discrepancy in absolute values
+     */
     function _updateMaturingAmount(UserGradual memory _userGradual, uint48 newMaturedVotingPower) private pure {
         if (_userGradual.maturingAmount < newMaturedVotingPower) {
             _userGradual.maturingAmount = 0;
