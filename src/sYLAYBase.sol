@@ -564,6 +564,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
 
         // apply changes to storage
         _userGraduals[from] = _userGradual;
+        _globalGradual = global;
 
         emit GradualBurned(from, amount, burnAll);
 
