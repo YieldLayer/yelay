@@ -253,7 +253,7 @@ contract YelayMigratorTest is Test {
         {
             vm.assertNotEq(sYlay.getTrancheIndex(block.timestamp), 158);
             vm.startPrank(owner);
-            sYlay.initialize();
+            yelayMigrator.migrateInitial();
             yelayMigrator.migrateGlobalTranches(voSpool.getCurrentTrancheIndex());
             vm.stopPrank();
             vm.assertEq(sYlay.getTrancheIndex(block.timestamp), 158);

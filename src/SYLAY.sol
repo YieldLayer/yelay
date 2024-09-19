@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-import "openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
-
 import "./sYLAYBase.sol";
 import "./libraries/ConversionLib.sol";
 
 import "./interfaces/IsYLAY.sol";
 import "./interfaces/IYelayOwner.sol";
 
-contract sYLAY is sYLAYBase, IsYLAY, Initializable {
+contract sYLAY is sYLAYBase, IsYLAY {
     /// @dev Reference to the original VoSPOOL contract used for migration.
     // to avoid type conflicts we are using sYLAYBase type
     sYLAYBase public immutable voSPOOL;
@@ -63,7 +61,7 @@ contract sYLAY is sYLAYBase, IsYLAY, Initializable {
         migrator = _migrator;
     }
 
-    function initialize() external initializer {
+    function migrateInitial() external onlyMigrator {
         firstTrancheStartTime = voSPOOL.firstTrancheStartTime();
 
         GlobalGradual memory voGlobalGradual = voSPOOL.getNotUpdatedGlobalGradual();

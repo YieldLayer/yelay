@@ -93,30 +93,29 @@ contract SYLAYTest is Test, Utilities {
 
         // Step 6: Deploy YelayStaking at precomputedYelayStakingAddress
         yelayStaking = new YelayStaking(
-            address(spoolOwner),
+            address(yelayOwner),
             address(yLAY),
             address(sYlay),
             address(precomputedsYLAYRewardsAddress),
             address(rewardDistributor),
             address(spoolStaking),
-            precomputedMigratorAddress
+            address(this)
         );
         assert(address(yelayStaking) == precomputedYelayStakingAddress);
 
         // Step 7: Deploy Migrator at precomputedMigratorAddress
-        yelayMigrator = new YelayMigrator(address(spoolOwner), yLAY, sYlay, address(yelayStaking), address(SPOOL));
+        yelayMigrator = new YelayMigrator(address(yelayOwner), yLAY, sYlay, address(yelayStaking), address(SPOOL));
         assert(address(yelayMigrator) == precomputedMigratorAddress);
 
         yLAY.initialize();
         yelayStaking.initialize();
-
-        sYlay.initialize();
 
         rewardToken1 = IERC20(new MockToken("TEST", "TEST"));
         rewardToken2 = IERC20(new MockToken("TEST", "TEST"));
     }
 
     function contractSetup() public {
+        sYlay.migrateInitial();
         sYlay.setGradualMinter(gradualMinter, true);
         // migrate all global tranches from voSPOOL to sYLAY.
         uint256 numIndexes = (voSPOOL.getCurrentTrancheIndex() / 5) + 1;

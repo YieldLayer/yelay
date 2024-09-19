@@ -75,10 +75,17 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
     }
 
     /**
+     * @notice Migrate initial state on sYLAY
+     */
+    function migrateInitial() external onlyOwner spoolDisabled {
+        sYLAY.migrateInitial();
+    }
+
+    /**
      * @notice Migrate global tranches for sYLAY up to the given endIndex.
      * @param endIndex The index up to which tranches should be migrated.
      */
-    function migrateGlobalTranches(uint256 endIndex) external onlyOwner {
+    function migrateGlobalTranches(uint256 endIndex) external onlyOwner spoolDisabled {
         sYLAY.migrateGlobalTranches(endIndex);
     }
 
