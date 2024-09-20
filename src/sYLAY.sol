@@ -61,6 +61,11 @@ contract sYLAY is sYLAYBase, IsYLAY {
         migrator = _migrator;
     }
 
+    /* ========== MIGRATION FUNCTIONS ========== */
+
+    /**
+     * @notice In order to start migration of stake this should be executed first
+     */
     function migrateInitial() external onlyMigrator {
         firstTrancheStartTime = voSPOOL.firstTrancheStartTime();
 
@@ -80,8 +85,6 @@ contract sYLAY is sYLAYBase, IsYLAY {
         $.totalMaturingAmountToMigrate = voGlobalGradual.totalMaturingAmount;
         $.initialized = true;
     }
-
-    /* ========== MIGRATION FUNCTIONS ========== */
 
     /**
      * @notice Migrates global tranches from VoSPOOL up to the specified end index.

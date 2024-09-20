@@ -129,12 +129,11 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
      * @param staker The address of the staker.
      * @return yelayToStake The total YLAY amount to be staked after migration.
      */
-    function _migrateStake(address staker) private returns (uint256 yelayToStake) {
+    function _migrateStake(address staker) private returns (uint256) {
         require(!migratedStake[staker], "YelayMigrator:_migrateStake: Staker already migrated");
         migratedStake[staker] = true;
 
         (uint256 yelayStaked, uint256 yelayRewards) = yelayStaking.migrateUser(staker);
-        yelayToStake += yelayStaked;
 
         if (yelayRewards > 0) {
             // Send claimed rewards directly to the user
@@ -144,6 +143,8 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
         sYLAY.migrateUser(staker);
 
         emit StakeMigrated(staker, yelayStaked, yelayRewards);
+
+        return yelayStaked;
     }
 
     /**
@@ -153,11 +154,11 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
     function _migrateBalance(address claimant) private {
         require(!blocklist[claimant], "YelayMigrator:_migrateBalance: User is blocklisted");
         require(!migratedBalance[claimant], "YelayMigrator:migrateBalance: User already migrated");
+        migratedBalance[claimant] = true;
 
         uint256 spoolBalance = SPOOL.balanceOf(claimant);
         uint256 ylayAmount = ConversionLib.convert(spoolBalance);
 
-        migratedBalance[claimant] = true;
         YLAY.claim(claimant, ylayAmount);
 
         emit BalanceMigrated(claimant, spoolBalance, ylayAmount);

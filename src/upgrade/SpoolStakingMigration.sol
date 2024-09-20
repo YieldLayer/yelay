@@ -20,7 +20,6 @@ contract SpoolStakingMigration is SpoolStaking {
         )
     {}
 
-    // TODO: is it ok to leave it without access control?
     function getUpdatedVoSpoolRewardAmount(address user) external returns (uint256 rewards) {
         // update rewards
         rewards = voSpoolRewards.updateRewards(user);

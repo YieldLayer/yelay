@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-import "src/interfaces/IsYLAY.sol";
-import "src/libraries/ConversionLib.sol";
-
 import {SpoolStakingMigration} from "./upgrade/SpoolStakingMigration.sol";
 import {YelayStakingBase, IERC20} from "./YelayStakingBase.sol";
+import "./libraries/ConversionLib.sol";
+
+import "./interfaces/IsYLAY.sol";
 
 contract YelayStaking is YelayStakingBase {
     /* ========== STATE VARIABLES ========== */
@@ -87,6 +87,7 @@ contract YelayStaking is YelayStakingBase {
         _migrateUser(user, yelayStaked);
 
         uint256 userSpoolRewards = spoolStaking.earned(SPOOL, user);
+        // SpoolStaking should be updated to SpoolStakingMigration before - to facilitate migration
         uint256 userVoSpoolRewards = SpoolStakingMigration(address(spoolStaking)).getUpdatedVoSpoolRewardAmount(user);
         yelayRewards = ConversionLib.convert(userSpoolRewards + userVoSpoolRewards);
     }

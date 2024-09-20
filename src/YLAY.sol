@@ -34,7 +34,7 @@ contract YLAY is IYLAY, YelayOwnable, Initializable, ERC20PausableUpgradeable, U
      * @param amount to transfer
      */
     function claim(address claimant, uint256 amount) external {
-        require(migrator == _msgSender() || isYelayOwner(), "YLAY::claim: Caller is not the migrator or admin");
+        require(migrator == _msgSender() || isYelayOwner(), "YLAY::claim: Caller is not the migrator or owner");
         _transfer(address(this), claimant, amount);
     }
 
