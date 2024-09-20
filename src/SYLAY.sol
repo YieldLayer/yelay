@@ -213,6 +213,23 @@ contract sYLAY is sYLAYBase, IsYLAY {
     }
 
     /**
+     * @notice Checks if the global migration has been completed.
+     * @return True if global migration is complete, false otherwise.
+     */
+    function globalMigrationComplete() external view returns (bool) {
+        return _globalMigrationComplete();
+    }
+
+    /**
+     * @notice Checks that migrateInitial was successful
+     * @return True or false
+     */
+    function migrationInitiated() external view returns (bool) {
+        sYLAYMigrationStorage storage $ = _getsYLAYMigrationStorageLocation();
+        return $.initialized;
+    }
+
+    /**
      * @notice Checks if the migration process is still ongoing.
      * @return True if the migration is still in progress, false otherwise.
      */
