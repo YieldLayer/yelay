@@ -19,7 +19,7 @@ contract YelayOwnerDeploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
         YelayOwner yelayOwner = new YelayOwner();
-        yelayOwner.transferOwnership(0x4e736b96920a0f305022CBaAea493Ce7e49Eee6C);
+        yelayOwner.transferOwnership(json.getAddress(".yelayMultisig"));
         vm.stopBroadcast();
 
         json.add("YelayOwner", address(yelayOwner));
