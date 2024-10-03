@@ -31,9 +31,9 @@ contract Deploy is Script {
     address spoolStaking;
     address voSpool;
 
+    YLAY ylay;
+
     struct Args {
-        address ylayImpl;
-        address ylayAddr;
         address sYlayRewardsImpl;
         address sYlayRewardsAddr;
         address yelayMigratorImpl;
@@ -56,6 +56,7 @@ contract Deploy is Script {
         spool = json.getAddress(".SPOOL");
         spoolStaking = json.getAddress(".SpoolStaking");
         voSpool = json.getAddress(".voSpool");
+        ylay = YLAY(json.getAddress(".YLAY.proxy"));
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
 
@@ -69,29 +70,19 @@ contract Deploy is Script {
             address(0),
             address(0),
             address(0),
-            address(0),
-            address(0),
             address(0)
         );
 
-        args.ylayImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress));
-        args.ylayAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 1);
-        args.sYlayRewardsImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 2);
-        args.sYlayRewardsAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 3);
-        args.yelayMigratorImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 4);
-        args.yelayMigratorAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 5);
-        args.yelayStakingImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 6);
-        args.yelayStakingAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 7);
-        args.sYlayImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 8);
-        args.sYlayAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 9);
-        args.yelayRewardDistributorImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 10);
-        args.yelayRewardDistributorAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 11);
-
-        {
-            new YLAY(yelayOwner, args.yelayMigratorAddr);
-            address ylay = address(new ERC1967Proxy(args.ylayImpl, ""));
-            assert(ylay == args.ylayAddr);
-        }
+        args.sYlayRewardsImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress));
+        args.sYlayRewardsAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 1);
+        args.yelayMigratorImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 2);
+        args.yelayMigratorAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 3);
+        args.yelayStakingImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 4);
+        args.yelayStakingAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 5);
+        args.sYlayImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 6);
+        args.sYlayAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 7);
+        args.yelayRewardDistributorImpl = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 8);
+        args.yelayRewardDistributorAddr = vm.computeCreateAddress(deployerAddress, vm.getNonce(deployerAddress) + 9);
 
         {
             new sYLAYRewards(args.yelayStakingAddr, address(args.sYlayAddr), address(yelayOwner));
@@ -99,9 +90,7 @@ contract Deploy is Script {
             assert(sYlayRewards == args.sYlayRewardsAddr);
         }
 
-        new YelayMigrator(
-            address(yelayOwner), YLAY(args.ylayAddr), IsYLAY(args.sYlayAddr), args.yelayStakingAddr, spool
-        );
+        new YelayMigrator(address(yelayOwner), ylay, IsYLAY(args.sYlayAddr), args.yelayStakingAddr, spool);
         address yelayMigrator = address(new TransparentUpgradeableProxy(args.yelayMigratorImpl, proxyAdmin, ""));
         assert(
             ProxyAdmin(proxyAdmin).getProxyImplementation(TransparentUpgradeableProxy(payable(yelayMigrator)))
@@ -112,7 +101,7 @@ contract Deploy is Script {
 
         new YelayStaking(
             address(yelayOwner),
-            address(args.ylayAddr),
+            address(ylay),
             address(args.sYlayAddr),
             address(args.sYlayRewardsAddr),
             args.yelayRewardDistributorAddr,
@@ -134,14 +123,15 @@ contract Deploy is Script {
             address(new TransparentUpgradeableProxy(args.yelayRewardDistributorImpl, address(proxyAdmin), ""))
         );
         assert(address(yelayRewardDistributor) == args.yelayRewardDistributorAddr);
+        address finalYlayImpl = address(new YLAY(yelayOwner, args.yelayMigratorAddr));
 
         vm.stopBroadcast();
 
-        json.addProxy("YLAY", args.ylayImpl, args.ylayAddr);
         json.addProxy("sYLAYRewards", args.sYlayRewardsImpl, args.sYlayRewardsAddr);
         json.addProxy("YelayMigrator", args.yelayMigratorImpl, args.yelayMigratorAddr);
         json.addProxy("YelayStaking", args.yelayStakingImpl, args.yelayStakingAddr);
         json.addProxy("sYLAY", args.sYlayImpl, args.sYlayAddr);
         json.addProxy("YelayRewardsDistributor", args.yelayRewardDistributorImpl, args.yelayRewardDistributorAddr);
+        json.addProxy("YLAY", finalYlayImpl, address(ylay));
     }
 }
