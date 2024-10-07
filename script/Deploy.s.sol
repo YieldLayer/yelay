@@ -7,7 +7,7 @@ import "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol
 import "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 
-import {JsonReadWriter} from "./helpers.sol";
+import {JsonReadWriter, Environment} from "./helpers.sol";
 
 import {YLAY} from "src/YLAY.sol";
 import {YelayOwner, IYelayOwner} from "src/YelayOwner.sol";
@@ -19,7 +19,7 @@ import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
 import {ConversionLib} from "src/libraries/ConversionLib.sol";
 
 /**
- *  source .env && forge script script/Deploy.s.sol:Deploy --rpc-url=$MAINNET_RPC_URL --with-gas-price 2000000000 --slow --broadcast --legacy --etherscan-api-key $ETHERSCAN_API_KEY --verify
+ *  source .env && FOUNDRY_PROFILE=local forge script script/Deploy.s.sol:Deploy --with-gas-price 2000000000 --slow --broadcast --legacy --etherscan-api-key $ETHERSCAN_API_KEY --verify
  * @dev Optionally can change `--with-gas-price` to something more reasonable
  */
 contract Deploy is Script {
@@ -47,9 +47,10 @@ contract Deploy is Script {
     }
 
     function run() external {
-        deployerAddress = vm.addr(vm.envUint("PRIVATE_KEY"));
+        deployerAddress = vm.addr(Environment.getPrivateKey(vm));
+        Environment.setRpc(vm);
 
-        JsonReadWriter json = new JsonReadWriter(vm, "deployment/mainnet.json");
+        JsonReadWriter json = new JsonReadWriter(vm, Environment.getContractsPath(vm));
 
         yelayOwner = YelayOwner(json.getAddress(".YelayOwner"));
         proxyAdmin = json.getAddress(".ProxyAdmin");
@@ -58,7 +59,7 @@ contract Deploy is Script {
         voSpool = json.getAddress(".voSpool");
         ylay = YLAY(json.getAddress(".YLAY.proxy"));
 
-        vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
+        vm.startBroadcast(Environment.getPrivateKey(vm));
 
         Args memory args = Args(
             address(0),

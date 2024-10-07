@@ -194,3 +194,55 @@ contract JsonReader {
 contract JsonReadWriter is JsonReader, JsonWriter {
     constructor(VmSafe vm, string memory path) JsonReader(vm, path) JsonWriter(vm, path) {}
 }
+
+library Environment {
+    function equal(string memory a, string memory b) internal pure returns (bool) {
+        return keccak256(bytes(a)) == keccak256(bytes(b));
+    }
+
+    function getPrivateKey(VmSafe vmSafe_) internal returns (uint256) {
+        string memory profile = vmSafe_.envString("FOUNDRY_PROFILE");
+        if (equal(profile, "mainnet")) {
+            return vmSafe_.envUint("MAINNET_PRIVATE_KEY");
+        } else if (equal(profile, "arbitrum")) {
+            return vmSafe_.envUint("ARBITRUM_PRIVATE_KEY");
+        } else if (equal(profile, "tenderly")) {
+            return vmSafe_.envUint("TENDERLY_PRIVATE_KEY");
+        } else if (equal(profile, "local")) {
+            return vmSafe_.envUint("LOCAL_PRIVATE_KEY");
+        }
+        revert("Environment::getPrivateKey not supported");
+    }
+
+    function getContractsPath(VmSafe vmSafe_) internal returns (string memory) {
+        string memory profile = vmSafe_.envString("FOUNDRY_PROFILE");
+        if (equal(profile, "mainnet")) {
+            return "deployment/mainnet.json";
+        } else if (equal(profile, "arbitrum")) {
+            return "deployment/arbitrum.json";
+        } else if (equal(profile, "tenderly")) {
+            return "deployment/tenderly.json";
+        } else if (equal(profile, "local")) {
+            return "deployment/local.json";
+        }
+        revert("Environment::getContractsPath not supported");
+    }
+
+    function setRpc(Vm vm_) internal {
+        string memory profile = vm_.envString("FOUNDRY_PROFILE");
+        if (equal(profile, "mainnet")) {
+            vm_.createSelectFork("mainnet");
+            return;
+        } else if (equal(profile, "arbitrum")) {
+            vm_.createSelectFork("arbitrum");
+            return;
+        } else if (equal(profile, "tenderly")) {
+            vm_.createSelectFork("tenderly");
+            return;
+        } else if (equal(profile, "local")) {
+            vm_.createSelectFork("local");
+            return;
+        }
+        revert("Environment::setRpc not supported");
+    }
+}
