@@ -405,6 +405,10 @@ contract YelayMigratorTest is Test {
             assertEq(sYlay.getUserGradualVotingPower(user1), 0);
         }
 
+        vm.startPrank(owner);
+        yelayStaking.setStakingStarted(true);
+        vm.stopPrank();
+
         // new staking part
         uint256 user2SecondStake = 100e18;
         vm.startPrank(user2);
