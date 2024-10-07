@@ -221,17 +221,12 @@ contract YelayMigratorTest is Test {
 
         vm.startPrank(user1);
         vm.expectRevert();
-        spoolStaking.setPaused(true);
-        assertFalse(spoolStaking.paused());
-        vm.stopPrank();
-
-        vm.startPrank(owner);
-        spoolStaking.setPaused(true);
-        assertTrue(spoolStaking.paused());
+        spoolStaking.setStakingAllowed(false);
+        assertFalse(spoolStaking.stakingAllowed());
         vm.stopPrank();
 
         vm.startPrank(user1);
-        vm.expectRevert("SpoolStaking::stake is paused");
+        vm.expectRevert("SpoolStaking::stake staking is not allowed");
         spoolStaking.stake(user1Stake2);
         vm.stopPrank();
 

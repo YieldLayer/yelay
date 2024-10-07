@@ -293,7 +293,8 @@ contract SpoolStaking is ReentrancyGuardUpgradeable, SpoolOwnable, ISpoolStaking
     /* ========== RESTRICTED FUNCTIONS ========== */
 
     function stakeFor(address account, uint256 amount)
-        external
+        public
+        virtual
         nonReentrant
         canStakeForAddress(account)
         updateRewards(account)
