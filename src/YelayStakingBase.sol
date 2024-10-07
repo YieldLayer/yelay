@@ -147,7 +147,7 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
 
     /* ========== MUTATIVE FUNCTIONS ========== */
 
-    function stake(uint256 amount) external nonReentrant updateRewards(msg.sender) {
+    function stake(uint256 amount) public virtual nonReentrant updateRewards(msg.sender) {
         _stake(msg.sender, amount);
 
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -291,7 +291,8 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     /* ========== RESTRICTED FUNCTIONS ========== */
 
     function stakeFor(address account, uint256 amount)
-        external
+        public
+        virtual
         nonReentrant
         canStakeForAddress(account)
         updateRewards(account)
