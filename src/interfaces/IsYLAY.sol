@@ -9,4 +9,5 @@ interface IsYLAY is IsYLAYBase {
     function migrateInitial() external;
     function migrateUser(address user) external;
     function migrateGlobalTranches(uint256 endIndex) external;
+    function globalMigrationComplete() external view returns (bool);
 }

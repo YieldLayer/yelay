@@ -122,6 +122,15 @@ contract YelayStaking is YelayStakingBase {
         sYLAY.transferUser(msg.sender, to);
     }
 
+    /* ========== EXTERNAL FUNCTIONS ========== */
+    function stake(uint256 amount) public virtual override stakingStarted {
+        super.stake(amount);
+    }
+
+    function stakeFor(address account, uint256 amount) public virtual override stakingStarted {
+        super.stakeFor(account, amount);
+    }
+
     /* ========== INTERNAL FUNCTIONS ========== */
 
     /**
@@ -145,7 +154,7 @@ contract YelayStaking is YelayStakingBase {
      * @dev The migration is considered complete when all staked SPOOL tokens have been migrated to YLAY.
      * @return True if the migration is complete, false otherwise.
      */
-    function migrationComplete() external view returns (bool) {
+    function migrationComplete() public view returns (bool) {
         YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
         return $.totalStakedSPOOLMigrated == spoolStaking.totalStaked();
     }
@@ -166,6 +175,11 @@ contract YelayStaking is YelayStakingBase {
      */
     modifier onlyMigrator() {
         require(msg.sender == migrator, "YelayStaking: caller not migrator");
+        _;
+    }
+    
+    modifier stakingStarted() {
+        require(migrationComplete() && sYLAY.globalMigrationComplete(), "YelayStaking: staking not started");
         _;
     }
 }
