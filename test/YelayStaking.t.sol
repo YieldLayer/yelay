@@ -16,7 +16,7 @@ import {sYLAYRewards} from "src/sYLAYRewards.sol";
 import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
 import {VoSPOOL, IVoSPOOL} from "spool/VoSPOOL.sol";
 import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
-import {YelayStaking, YelayStakingBase, IERC20} from "src/YelayStaking.sol";
+import {YelayStaking, IERC20} from "src/YelayStaking.sol";
 import {YelayMigrator} from "src/YelayMigrator.sol";
 
 contract YelayStakingTest is Test, Utilities {
@@ -34,7 +34,7 @@ contract YelayStakingTest is Test, Utilities {
     YLAY yLAY;
     sYLAY sYlay;
     YelayRewardDistributor rewardDistributor;
-    YelayStakingHarness yelayStaking;
+    YelayStaking yelayStaking;
     YelayMigrator yelayMigrator;
     sYLAYRewards sYlayRewards;
 
@@ -92,7 +92,7 @@ contract YelayStakingTest is Test, Utilities {
         assert(address(rewardDistributor) == precomputedRewardDistributorAddress);
 
         // Step 6: Deploy YelayStaking at precomputedYelayStakingAddress
-        yelayStaking = new YelayStakingHarness(
+        yelayStaking = new YelayStaking(
             address(yelayOwner),
             address(yLAY),
             address(sYlay),
@@ -152,7 +152,8 @@ contract YelayStakingTest is Test, Utilities {
         rewardToken2.transfer(address(rewardDistributor), 100000 ether);
         deal(address(yLAY), address(rewardDistributor), 100000 ether);
 
-        // simulate migration complete
+        // enable staking
+        yelayStaking.setStakingStarted(true);
     }
 
     function setUp() public {
@@ -756,24 +757,34 @@ contract YelayStakingTest is Test, Utilities {
         assertEq(user1Gradual.maturingAmount, 0);
         assertEq(user2Gradual.maturingAmount, maturingAmountBefore);
     }
-}
 
-contract YelayStakingHarness is YelayStaking {
-    constructor(
-        address _owner,
-        address _yLAY,
-        address _sYlay,
-        address _sYlayRewards,
-        address _rewardDistributor,
-        address _spoolStaking,
-        address _migrator
-    ) YelayStaking(_owner, _yLAY, _sYlay, _sYlayRewards, _rewardDistributor, _spoolStaking, _migrator) {}
+    ///* ---------------------------------
+    //Section 9: stakingStarted
+    //---------------------------------- */
+    /// @notice Test stakingStarted functionality with reward rate setup
+    function test_stakingStarted() public {
+        // disable staking
+        yelayStaking.setStakingStarted(false);
 
-    function stake(uint256 amount) public override {
-        YelayStakingBase.stake(amount);
-    }
+        // ARRANGE
+        uint256 stakeAmount = 1000 ether; // Amount to Stake
 
-    function stakeFor(address user, uint256 amount) public override {
-        YelayStakingBase.stakeFor(user, amount);
+        // ACT
+        vm.expectRevert("YelayStaking::_stakingStarted: staking not started");
+        vm.prank(user1);
+        yelayStaking.stake(stakeAmount);
+
+        // ASSERT
+        assertEq(yelayStaking.balances(user1), 0);
+
+        // enable staking
+        yelayStaking.setStakingStarted(true);
+
+        // ACT
+        vm.prank(user1);
+        yelayStaking.stake(stakeAmount);
+
+        // ASSERT
+        assertEq(yelayStaking.balances(user1), stakeAmount);
     }
 }

@@ -31,6 +31,8 @@ contract YelayStaking is YelayStakingBase {
     struct YelayStakingMigrationStorage {
         /// @notice The total amount of SPOOL tokens that have been migrated to YLAY staking.
         uint256 totalStakedSPOOLMigrated;
+        /// @notice The flag to indicate if the migration process is complete.
+        bool stakingStarted;
     }
 
     // keccak256(abi.encode(uint256(keccak256("yelay.storage.YelayStakingMigrationStorage")) - 1)) & ~bytes32(uint256(0xff))
@@ -137,12 +139,17 @@ contract YelayStaking is YelayStakingBase {
     }
 
     /* ========== EXTERNAL FUNCTIONS ========== */
-    function stake(uint256 amount) public virtual override stakingStarted {
+    function stake(uint256 amount) public override stakingStarted {
         super.stake(amount);
     }
 
-    function stakeFor(address account, uint256 amount) public virtual override stakingStarted {
+    function stakeFor(address account, uint256 amount) public override stakingStarted {
         super.stakeFor(account, amount);
+    }
+
+    function setStakingStarted(bool set) external onlyOwner {
+        YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
+        $.stakingStarted = set;
     }
 
     /* ========== INTERNAL FUNCTIONS ========== */
@@ -182,6 +189,11 @@ contract YelayStaking is YelayStakingBase {
         return $.totalStakedSPOOLMigrated;
     }
 
+    function _stakingStarted() internal view {
+        YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
+        require($.stakingStarted, "YelayStaking::_stakingStarted: staking not started");
+    }
+
     /* ========== MODIFIERS ========== */
 
     /**
@@ -193,7 +205,7 @@ contract YelayStaking is YelayStakingBase {
     }
 
     modifier stakingStarted() {
-        require(migrationComplete() && sYLAY.globalMigrationComplete(), "YelayStaking: staking not started");
+        _stakingStarted();
         _;
     }
 }
