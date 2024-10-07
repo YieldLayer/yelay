@@ -113,10 +113,10 @@ library ConversionLib {
 
         // Apply rounding: (value + half) / 1e18. If exactly halfway, rounds down.
         uint256 half = 1e18 / 2;
-        if (multiplied % 1e18 >= half) {
-            return multiplied / 1e18;
+        if (multiplied % 1e18 > half) {
+            return (multiplied + half) / 1e18;
         } else {
-            return (multiplied - half) / 1e18;
+            return multiplied / 1e18;
         }
     }
 }
