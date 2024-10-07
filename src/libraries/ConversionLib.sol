@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "forge-std/console.sol";
-
 library ConversionLib {
     // 1_000_000_000 (yelaySupply) * 10 ** 18 / 140_000_000 (spoolSupply because 70_000_000 were sent to 0xdead address) with 18 decimals of precision
     uint256 public constant CONVERSION_RATE = 7142857142857142857;
     uint256 private constant TRIM_SIZE_VOSPOOL = 10 ** 12;
     uint256 private constant TRIM_SIZE_YELAY = 10 ** 13;
+    uint256 private constant half = 1e18 / 2;
 
     /**
      * @notice Helper function to convert SPOOL amount to YLAY amount with rounding mechanics.
@@ -112,7 +111,6 @@ library ConversionLib {
         uint256 multiplied = amount * CONVERSION_RATE;
 
         // Apply rounding: (value + half) / 1e18. If exactly halfway, rounds down.
-        uint256 half = 1e18 / 2;
         if (multiplied % 1e18 > half) {
             return (multiplied + half) / 1e18;
         } else {

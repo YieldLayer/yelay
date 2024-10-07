@@ -22,7 +22,7 @@ import "./interfaces/IsYLAYBase.sol";
  * Instant voting power can be used in the full amount as soon as minted.
  *
  * Gradual voting power:
- *      Matures linearly over 156 weeks (3 years) up to the minted amount.
+ *      Matures linearly over 208 weeks (4 years) up to the minted amount.
  *      If a user burns gradual voting power, all accumulated voting power is
  *      reset to zero. In case there is some amount left, it'll take another 3
  *      years to achieve fully-matured power. Only gradual voting power is reset
@@ -116,7 +116,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     /// @notice amount of tranches to mature to full power
     uint256 public constant FULL_POWER_TRANCHES_COUNT = 52 * 4;
     /// @notice time until gradual power is fully-matured
-    /// @dev full power time is 156 weeks (approximately 3 years)
+    /// @dev full power time is 208 weeks (approximately 4 years)
     uint256 public constant FULL_POWER_TIME = TRANCHE_TIME * FULL_POWER_TRANCHES_COUNT;
 
     /// @notice Token name full name

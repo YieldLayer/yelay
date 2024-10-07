@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
+
 import {SpoolStakingMigration} from "./upgrade/SpoolStakingMigration.sol";
 import {YelayStakingBase, IERC20} from "./YelayStakingBase.sol";
 import "./libraries/ConversionLib.sol";
@@ -8,6 +10,8 @@ import "./libraries/ConversionLib.sol";
 import "./interfaces/IsYLAY.sol";
 
 contract YelayStaking is YelayStakingBase {
+    using ECDSA for bytes32;
+
     /* ========== STATE VARIABLES ========== */
 
     /// @notice The interface for staked YLAY (sYLAY) tokens.
@@ -99,7 +103,17 @@ contract YelayStaking is YelayStakingBase {
      * @dev This function is non-reentrant and updates rewards before transferring.
      * @param to The address of the recipient to whom the staking data is transferred.
      */
-    function transferUser(address to) external nonReentrant updateRewards(msg.sender) {
+    function transferUser(address to, uint256 deadline, bytes memory signature)
+        external
+        nonReentrant
+        updateRewards(msg.sender)
+    {
+        require(deadline > block.timestamp, "YelayStaking::transferUser: deadline has passed");
+        require(
+            keccak256(abi.encodePacked(msg.sender, deadline)).toEthSignedMessageHash().recover(signature) == to,
+            "YelayStaking::transferUser: invalid signature"
+        );
+
         balances[to] = balances[msg.sender];
         canStakeFor[to] = canStakeFor[msg.sender];
         stakedBy[to] = stakedBy[msg.sender];
@@ -177,7 +191,7 @@ contract YelayStaking is YelayStakingBase {
         require(msg.sender == migrator, "YelayStaking: caller not migrator");
         _;
     }
-    
+
     modifier stakingStarted() {
         require(migrationComplete() && sYLAY.globalMigrationComplete(), "YelayStaking: staking not started");
         _;
