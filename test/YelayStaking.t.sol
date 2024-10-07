@@ -759,7 +759,6 @@ contract YelayStakingTest is Test, Utilities {
 }
 
 contract YelayStakingHarness is YelayStaking {
-
     constructor(
         address _owner,
         address _yLAY,
