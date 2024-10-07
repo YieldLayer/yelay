@@ -77,7 +77,7 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
     /**
      * @notice Migrate initial state on sYLAY
      */
-    function migrateInitial() external onlyOwner spoolDisabled {
+    function migrateInitial() external onlyOwner spoolPaused {
         sYLAY.migrateInitial();
     }
 
@@ -85,7 +85,7 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
      * @notice Migrate global tranches for sYLAY up to the given endIndex.
      * @param endIndex The index up to which tranches should be migrated.
      */
-    function migrateGlobalTranches(uint256 endIndex) external onlyOwner spoolDisabled {
+    function migrateGlobalTranches(uint256 endIndex) external onlyOwner spoolPaused {
         sYLAY.migrateGlobalTranches(endIndex);
     }
 
@@ -95,7 +95,7 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
      * It calculates the YLAY amount using conversion and marks the claimant as migrated.
      * @param claimants An array of addresses of the claimants whose balances will be migrated.
      */
-    function migrateBalance(address[] calldata claimants) external onlyOwner spoolDisabled {
+    function migrateBalance(address[] calldata claimants) external onlyOwner spoolPaused {
         for (uint256 i = 0; i < claimants.length; i++) {
             _migrateBalance(claimants[i]);
         }
@@ -104,7 +104,7 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
     /**
      * @notice Allows individual claimants to migrate their own SPOOL balance to YLAY.
      */
-    function migrateBalance() external spoolDisabled {
+    function migrateBalance() external spoolPaused {
         _migrateBalance(msg.sender);
     }
 
@@ -112,7 +112,7 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
      * @notice Migrate the staked SPOOL to Yelay staking for multiple users.
      * @param claimants An array of addresses of the users whose staked balances will be migrated.
      */
-    function migrateStake(address[] calldata claimants) external onlyOwner spoolDisabled {
+    function migrateStake(address[] calldata claimants) external onlyOwner spoolPaused {
         uint256 yelayToStake;
         for (uint256 i = 0; i < claimants.length; i++) {
             yelayToStake += _migrateStake(claimants[i]);
@@ -167,19 +167,10 @@ contract YelayMigrator is YelayOwnable, IYelayMigrator {
     /* ========== MODIFIERS ========== */
 
     /**
-     * @notice Modifier to ensure that the SPOOL contract is disabled (paused and the owner is the zero address).
+     * @notice Modifier to ensure that the SPOOL contract is paused
      */
-    modifier spoolDisabled() {
-        _spoolDisabled();
+    modifier spoolPaused() {
+        require(SPOOL.paused(), "YelayMigrator:spoolPaused: SPOOL is enabled");
         _;
-    }
-    /* ========== PRIVATE VIEW FUNCTIONS ========== */
-
-    /**
-     * @notice Ensure that the SPOOL contract is paused and the owner is the zero address.
-     * @dev This ensures that SPOOL migration can only occur when the SPOOL system is fully disabled.
-     */
-    function _spoolDisabled() private view {
-        require(SPOOL.paused(), "YelayMigrator:_spoolDisabled: SPOOL is enabled");
     }
 }
