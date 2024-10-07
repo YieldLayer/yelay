@@ -132,8 +132,8 @@ contract YelayStaking is YelayStakingBase {
     function _migrateUser(address account, uint256 amount) private {
         unchecked {
             totalStaked = totalStaked += amount;
+            balances[account] += amount;
         }
-        balances[account] = amount;
 
         emit Staked(account, amount);
     }
