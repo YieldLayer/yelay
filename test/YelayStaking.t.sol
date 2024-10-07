@@ -3,6 +3,7 @@
 pragma solidity 0.8.13;
 
 import "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
 
 import "forge-std/Test.sol";
 import "spool/external/spool-core/SpoolOwner.sol";
@@ -19,8 +20,10 @@ import {YelayStaking, YelayStakingBase, IERC20} from "src/YelayStaking.sol";
 import {YelayMigrator} from "src/YelayMigrator.sol";
 
 contract YelayStakingTest is Test, Utilities {
+    using ECDSA for bytes32;
     // known addresses
     // TODO as constants
+
     YelayStaking spoolStaking = YelayStaking(0xc3160C5cc63B6116DD182faA8393d3AD9313e213);
     IERC20 SPOOL = IERC20(0x40803cEA2b2A32BdA1bE61d3604af6a814E70976);
     VoSPOOL voSPOOL = VoSPOOL(0xaF56D16a7fe479F2fcD48FF567fF589CB2d2a0E9);
@@ -44,7 +47,9 @@ contract YelayStakingTest is Test, Utilities {
     address stakeForWallet;
     address stakeForWallet2;
     address user1;
+    uint256 user1Pk;
     address user2;
+    uint256 user2Pk;
 
     // variables set in modifers
     uint256 rewardAmount;
@@ -159,8 +164,8 @@ contract YelayStakingTest is Test, Utilities {
         pauser = address(0x3);
         stakeForWallet = address(0x4);
         stakeForWallet2 = address(0x5);
-        user1 = address(0x6);
-        user2 = address(0x7);
+        (user1, user1Pk) = makeAddrAndKey("user1");
+        (user2, user2Pk) = makeAddrAndKey("user2");
 
         contractDeployment();
 
@@ -700,8 +705,31 @@ contract YelayStakingTest is Test, Utilities {
         uint256 earnedRewardToken1Before = yelayStaking.earned(rewardToken1, user1);
 
         // ACT - Transfer user1 data to user2
-        vm.prank(user1);
-        yelayStaking.transferUser(user2);
+        vm.startPrank(user1);
+        {
+            uint256 deadline = block.timestamp;
+            bytes32 hash_ = keccak256(abi.encodePacked(user2, deadline)).toEthSignedMessageHash();
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1Pk, hash_);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            vm.expectRevert("YelayStaking::transferUser: deadline has passed");
+            yelayStaking.transferUser(user2, deadline, signature);
+        }
+        {
+            uint256 deadline = block.timestamp + 100;
+            bytes32 hash_ = keccak256(abi.encodePacked(user1, deadline)).toEthSignedMessageHash();
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1Pk, hash_);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            vm.expectRevert("YelayStaking::transferUser: invalid signature");
+            yelayStaking.transferUser(user2, deadline, signature);
+        }
+        {
+            uint256 deadline = block.timestamp + 100;
+            bytes32 hash_ = keccak256(abi.encodePacked(user1, deadline)).toEthSignedMessageHash();
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(user2Pk, hash_);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            yelayStaking.transferUser(user2, deadline, signature);
+        }
+        vm.stopPrank();
 
         // ASSERT - Verify user2 has all the data from user1
         assertEq(yelayStaking.balances(user2), user1BalanceBefore);

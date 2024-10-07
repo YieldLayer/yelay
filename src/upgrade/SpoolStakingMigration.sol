@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-import "spool/SpoolStaking.sol";
+import "./SpoolStaking.sol";
 
 contract SpoolStakingMigration is SpoolStaking {
+    bool public paused;
+
     constructor(
         address _stakingToken,
         address _voSpool,
@@ -19,6 +21,15 @@ contract SpoolStakingMigration is SpoolStaking {
             ISpoolOwner(_spoolOwner)
         )
     {}
+
+    function setPaused(bool value) external onlyOwner {
+        paused = value;
+    }
+
+    function stake(uint256 amount) public override {
+        require(!paused, "SpoolStaking::stake is paused");
+        super.stake(amount);
+    }
 
     function getUpdatedVoSpoolRewardAmount(address user) external returns (uint256 rewards) {
         // update rewards
