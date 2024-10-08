@@ -200,7 +200,7 @@ library Environment {
         return keccak256(bytes(a)) == keccak256(bytes(b));
     }
 
-    function getPrivateKey(VmSafe vmSafe_) internal returns (uint256) {
+    function getPrivateKey(VmSafe vmSafe_) internal view returns (uint256) {
         string memory profile = vmSafe_.envString("FOUNDRY_PROFILE");
         if (equal(profile, "mainnet")) {
             return vmSafe_.envUint("MAINNET_PRIVATE_KEY");
@@ -208,13 +208,15 @@ library Environment {
             return vmSafe_.envUint("ARBITRUM_PRIVATE_KEY");
         } else if (equal(profile, "tenderly")) {
             return vmSafe_.envUint("TENDERLY_PRIVATE_KEY");
+        } else if (equal(profile, "arbitrum-tenderly")) {
+            return vmSafe_.envUint("ARBITRUM_TENDERLY_PRIVATE_KEY");
         } else if (equal(profile, "local")) {
             return vmSafe_.envUint("LOCAL_PRIVATE_KEY");
         }
         revert("Environment::getPrivateKey not supported");
     }
 
-    function getContractsPath(VmSafe vmSafe_) internal returns (string memory) {
+    function getContractsPath(VmSafe vmSafe_) internal view returns (string memory) {
         string memory profile = vmSafe_.envString("FOUNDRY_PROFILE");
         if (equal(profile, "mainnet")) {
             return "deployment/mainnet.json";
@@ -222,6 +224,8 @@ library Environment {
             return "deployment/arbitrum.json";
         } else if (equal(profile, "tenderly")) {
             return "deployment/tenderly.json";
+        } else if (equal(profile, "arbitrum-tenderly")) {
+            return "deployment/arbitrum-tenderly.json";
         } else if (equal(profile, "local")) {
             return "deployment/local.json";
         }
@@ -238,6 +242,9 @@ library Environment {
             return;
         } else if (equal(profile, "tenderly")) {
             vm_.createSelectFork("tenderly");
+            return;
+        } else if (equal(profile, "arbitrum-tenderly")) {
+            vm_.createSelectFork("arbitrum-tenderly");
             return;
         } else if (equal(profile, "local")) {
             vm_.createSelectFork("local");

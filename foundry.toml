@@ -11,6 +11,7 @@ optimizer_runs = 99999
 mainnet = "${MAINNET_RPC_URL}"
 arbitrum = "${ARBITRUM_RPC_URL}"
 tenderly = "${TENDERLY_RPC_URL}"
+arbitrum-tenderly = "${ARBITRUM_TENDERLY_RPC_URL}"
 local = "${LOCAL_RPC_URL}"
 
 [profile.mainnet]
@@ -24,6 +25,10 @@ broadcast = 'broadcast/arbitrum'
 [profile.tenderly]
 cache_path = 'cache/tenderly'
 broadcast = 'broadcast/tenderly'
+
+[profile.arbitrum-tenderly]
+cache_path = 'cache/arbitrum-tenderly'
+broadcast = 'broadcast/arbitrum-tenderly'
 
 [profile.local]
 cache_path = 'cache/local'
