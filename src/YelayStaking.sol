@@ -2,6 +2,7 @@
 pragma solidity 0.8.13;
 
 import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
+import {EIP712} from "openzeppelin-contracts/utils/cryptography/draft-EIP712.sol";
 
 import {SpoolStakingMigration} from "./upgrade/SpoolStakingMigration.sol";
 import {YelayStakingBase, IERC20} from "./YelayStakingBase.sol";
@@ -9,7 +10,7 @@ import "./libraries/ConversionLib.sol";
 
 import "./interfaces/IsYLAY.sol";
 
-contract YelayStaking is YelayStakingBase {
+contract YelayStaking is YelayStakingBase, EIP712 {
     using ECDSA for bytes32;
 
     /* ========== STATE VARIABLES ========== */
@@ -26,6 +27,8 @@ contract YelayStaking is YelayStakingBase {
 
     /// @notice The address of the migrator contract responsible for migration.
     address public immutable migrator;
+
+    bytes32 private constant _TRANSFER_USER_TYPEHASH = keccak256("TransferUser(address to, uint256 deadline)");
 
     /// @custom:storage-location erc7201:yelay.storage.YelayStakingMigrationStorage
     struct YelayStakingMigrationStorage {
@@ -64,7 +67,7 @@ contract YelayStaking is YelayStakingBase {
         address _rewardDistributor,
         address _spoolStaking,
         address _migrator
-    ) YelayStakingBase(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _yelayOwner) {
+    ) YelayStakingBase(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _yelayOwner) EIP712("YelayStaking", "1.0.0") {
         sYLAY = IsYLAY(_sYLAY);
         spoolStaking = YelayStakingBase(_spoolStaking);
         SPOOL = IERC20(address(spoolStaking.stakingToken()));
@@ -108,13 +111,15 @@ contract YelayStaking is YelayStakingBase {
     function transferUser(address to, uint256 deadline, bytes memory signature)
         external
         nonReentrant
+        stakingStarted
         updateRewards(msg.sender)
     {
         require(deadline > block.timestamp, "YelayStaking::transferUser: deadline has passed");
-        require(
-            keccak256(abi.encodePacked(msg.sender, deadline)).toEthSignedMessageHash().recover(signature) == to,
-            "YelayStaking::transferUser: invalid signature"
-        );
+
+        bytes32 hash_ = _hashTypedDataV4(structHash(msg.sender, deadline));
+        address signer = ECDSA.recover(hash_, signature);
+
+        require(signer == to, "YelayStaking::transferUser: invalid signature");
 
         balances[to] = balances[msg.sender];
         canStakeFor[to] = canStakeFor[msg.sender];
@@ -150,6 +155,20 @@ contract YelayStaking is YelayStakingBase {
     function setStakingStarted(bool set) external onlyOwner {
         YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
         $.stakingStarted = set;
+    }
+
+    /**
+     * @dev Returns the domain separator for the current chain.
+     */
+    function domainSeparatorV4() external view returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    /**
+     * @dev Returns the struct hash for hashTypedDataV4
+     */
+    function structHash(address from, uint256 deadline) public pure returns (bytes32) {
+        return keccak256(abi.encode(_TRANSFER_USER_TYPEHASH, from, deadline));
     }
 
     /* ========== INTERNAL FUNCTIONS ========== */

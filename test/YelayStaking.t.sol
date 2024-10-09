@@ -709,7 +709,8 @@ contract YelayStakingTest is Test, Utilities {
         vm.startPrank(user1);
         {
             uint256 deadline = block.timestamp;
-            bytes32 hash_ = keccak256(abi.encodePacked(user2, deadline)).toEthSignedMessageHash();
+            bytes32 hash_ =
+                ECDSA.toTypedDataHash(yelayStaking.domainSeparatorV4(), yelayStaking.structHash(user2, deadline));
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1Pk, hash_);
             bytes memory signature = abi.encodePacked(r, s, v);
             vm.expectRevert("YelayStaking::transferUser: deadline has passed");
@@ -717,7 +718,8 @@ contract YelayStakingTest is Test, Utilities {
         }
         {
             uint256 deadline = block.timestamp + 100;
-            bytes32 hash_ = keccak256(abi.encodePacked(user1, deadline)).toEthSignedMessageHash();
+            bytes32 hash_ =
+                ECDSA.toTypedDataHash(yelayStaking.domainSeparatorV4(), yelayStaking.structHash(user1, deadline));
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1Pk, hash_);
             bytes memory signature = abi.encodePacked(r, s, v);
             vm.expectRevert("YelayStaking::transferUser: invalid signature");
@@ -725,7 +727,8 @@ contract YelayStakingTest is Test, Utilities {
         }
         {
             uint256 deadline = block.timestamp + 100;
-            bytes32 hash_ = keccak256(abi.encodePacked(user1, deadline)).toEthSignedMessageHash();
+            bytes32 hash_ =
+                ECDSA.toTypedDataHash(yelayStaking.domainSeparatorV4(), yelayStaking.structHash(user1, deadline));
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(user2Pk, hash_);
             bytes memory signature = abi.encodePacked(r, s, v);
             yelayStaking.transferUser(user2, deadline, signature);
