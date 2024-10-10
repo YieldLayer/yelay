@@ -21,6 +21,8 @@ contract sYLAY is sYLAYBase, IsYLAY {
         uint256 lastGlobalIndexVoSPOOLMigrated;
         /// @dev the last global tranche index from VoSPOOL to be migrated.
         uint256 lastGlobalIndexVoSPOOL;
+        /// @dev index for indexedGlobalTranches
+        uint256 globalIndexer;
         /// @notice The total amount of instant power migrated
         uint256 totalInstantPowerMigrated;
         /// @notice The total amount of instant power to migrate
@@ -96,7 +98,7 @@ contract sYLAY is sYLAYBase, IsYLAY {
         _whenInitialized($);
         if (_globalMigrationComplete()) return;
 
-        for (uint256 i = $.lastGlobalIndexVoSPOOLMigrated; i < endIndex; i++) {
+        for (uint256 i = $.globalIndexer; i < endIndex; i++) {
             (Tranche memory zero, Tranche memory one, Tranche memory two, Tranche memory three, Tranche memory four) =
                 voSPOOL.indexedGlobalTranches(i);
             (uint48 a, uint48 b, uint48 c, uint48 d, uint48 e) =
@@ -104,7 +106,8 @@ contract sYLAY is sYLAYBase, IsYLAY {
             indexedGlobalTranches[i] = GlobalTranches(Tranche(a), Tranche(b), Tranche(c), Tranche(d), Tranche(e));
         }
 
-        $.lastGlobalIndexVoSPOOLMigrated += endIndex * TRANCHES_PER_WORD;
+        $.globalIndexer = endIndex;
+        $.lastGlobalIndexVoSPOOLMigrated = endIndex * TRANCHES_PER_WORD;
         emit GlobalTranchesMigrated($.lastGlobalIndexVoSPOOLMigrated);
     }
 

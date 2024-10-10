@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
+import {EIP712} from "openzeppelin-contracts/utils/cryptography/draft-EIP712.sol";
+
 import {SpoolStakingMigration} from "./upgrade/SpoolStakingMigration.sol";
 import {YelayStakingBase, IERC20} from "./YelayStakingBase.sol";
 import "./libraries/ConversionLib.sol";
 
 import "./interfaces/IsYLAY.sol";
 
-contract YelayStaking is YelayStakingBase {
+contract YelayStaking is YelayStakingBase, EIP712 {
+    using ECDSA for bytes32;
+
     /* ========== STATE VARIABLES ========== */
 
     /// @notice The interface for staked YLAY (sYLAY) tokens.
@@ -23,10 +28,14 @@ contract YelayStaking is YelayStakingBase {
     /// @notice The address of the migrator contract responsible for migration.
     address public immutable migrator;
 
+    bytes32 private constant _TRANSFER_USER_TYPEHASH = keccak256("TransferUser(address to, uint256 deadline)");
+
     /// @custom:storage-location erc7201:yelay.storage.YelayStakingMigrationStorage
     struct YelayStakingMigrationStorage {
         /// @notice The total amount of SPOOL tokens that have been migrated to YLAY staking.
         uint256 totalStakedSPOOLMigrated;
+        /// @notice The flag to indicate if the migration process is complete.
+        bool stakingStarted;
     }
 
     // keccak256(abi.encode(uint256(keccak256("yelay.storage.YelayStakingMigrationStorage")) - 1)) & ~bytes32(uint256(0xff))
@@ -58,7 +67,7 @@ contract YelayStaking is YelayStakingBase {
         address _rewardDistributor,
         address _spoolStaking,
         address _migrator
-    ) YelayStakingBase(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _yelayOwner) {
+    ) YelayStakingBase(_YLAY, _sYLAY, _sYLAYRewards, _rewardDistributor, _yelayOwner) EIP712("YelayStaking", "1.0.0") {
         sYLAY = IsYLAY(_sYLAY);
         spoolStaking = YelayStakingBase(_spoolStaking);
         SPOOL = IERC20(address(spoolStaking.stakingToken()));
@@ -99,7 +108,19 @@ contract YelayStaking is YelayStakingBase {
      * @dev This function is non-reentrant and updates rewards before transferring.
      * @param to The address of the recipient to whom the staking data is transferred.
      */
-    function transferUser(address to) external nonReentrant updateRewards(msg.sender) {
+    function transferUser(address to, uint256 deadline, bytes memory signature)
+        external
+        nonReentrant
+        stakingStarted
+        updateRewards(msg.sender)
+    {
+        require(deadline > block.timestamp, "YelayStaking::transferUser: deadline has passed");
+
+        bytes32 hash_ = _hashTypedDataV4(structHash(msg.sender, deadline));
+        address signer = ECDSA.recover(hash_, signature);
+
+        require(signer == to, "YelayStaking::transferUser: invalid signature");
+
         balances[to] = balances[msg.sender];
         canStakeFor[to] = canStakeFor[msg.sender];
         stakedBy[to] = stakedBy[msg.sender];
@@ -122,6 +143,34 @@ contract YelayStaking is YelayStakingBase {
         sYLAY.transferUser(msg.sender, to);
     }
 
+    /* ========== EXTERNAL FUNCTIONS ========== */
+    function stake(uint256 amount) public override stakingStarted {
+        super.stake(amount);
+    }
+
+    function stakeFor(address account, uint256 amount) public override stakingStarted {
+        super.stakeFor(account, amount);
+    }
+
+    function setStakingStarted(bool set) external onlyOwner {
+        YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
+        $.stakingStarted = set;
+    }
+
+    /**
+     * @dev Returns the domain separator for the current chain.
+     */
+    function domainSeparatorV4() external view returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    /**
+     * @dev Returns the struct hash for hashTypedDataV4
+     */
+    function structHash(address from, uint256 deadline) public pure returns (bytes32) {
+        return keccak256(abi.encode(_TRANSFER_USER_TYPEHASH, from, deadline));
+    }
+
     /* ========== INTERNAL FUNCTIONS ========== */
 
     /**
@@ -132,8 +181,8 @@ contract YelayStaking is YelayStakingBase {
     function _migrateUser(address account, uint256 amount) private {
         unchecked {
             totalStaked = totalStaked += amount;
+            balances[account] += amount;
         }
-        balances[account] = amount;
 
         emit Staked(account, amount);
     }
@@ -145,7 +194,7 @@ contract YelayStaking is YelayStakingBase {
      * @dev The migration is considered complete when all staked SPOOL tokens have been migrated to YLAY.
      * @return True if the migration is complete, false otherwise.
      */
-    function migrationComplete() external view returns (bool) {
+    function migrationComplete() public view returns (bool) {
         YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
         return $.totalStakedSPOOLMigrated == spoolStaking.totalStaked();
     }
@@ -159,6 +208,11 @@ contract YelayStaking is YelayStakingBase {
         return $.totalStakedSPOOLMigrated;
     }
 
+    function _stakingStarted() internal view {
+        YelayStakingMigrationStorage storage $ = _getYelayStakingMigrationStorageLocation();
+        require($.stakingStarted, "YelayStaking::_stakingStarted: staking not started");
+    }
+
     /* ========== MODIFIERS ========== */
 
     /**
@@ -166,6 +220,11 @@ contract YelayStaking is YelayStakingBase {
      */
     modifier onlyMigrator() {
         require(msg.sender == migrator, "YelayStaking: caller not migrator");
+        _;
+    }
+
+    modifier stakingStarted() {
+        _stakingStarted();
         _;
     }
 }

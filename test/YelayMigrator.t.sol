@@ -48,7 +48,7 @@ contract YelayMigratorTest is Test {
     SpoolOwner spoolOwner;
     VoSPOOL voSpool;
     RewardDistributor rewardDistributor;
-    SpoolStaking spoolStaking;
+    SpoolStakingMigration spoolStaking;
     VoSpoolRewards voSpoolRewards;
 
     YelayOwner yelayOwner;
@@ -82,7 +82,8 @@ contract YelayMigratorTest is Test {
         new SpoolStaking(
             IERC20(address(spool)), voSpool, VoSpoolRewards(voSpoolRewardsAddr), rewardDistributor, spoolOwner
         );
-        spoolStaking = SpoolStaking(address(new TransparentUpgradeableProxy(spoolStakingImpl, address(proxyAdmin), "")));
+        spoolStaking =
+            SpoolStakingMigration(address(new TransparentUpgradeableProxy(spoolStakingImpl, address(proxyAdmin), "")));
 
         new VoSpoolRewards(spoolStakingAddr, voSpool, spoolOwner);
         voSpoolRewards =
@@ -203,6 +204,32 @@ contract YelayMigratorTest is Test {
         spoolStaking.stake(user2Stake);
         vm.stopPrank();
 
+        vm.startPrank(owner);
+        proxyAdmin.upgrade(
+            TransparentUpgradeableProxy(payable(address(spoolStaking))),
+            address(
+                new SpoolStakingMigration(
+                    address(spool),
+                    address(voSpool),
+                    address(voSpoolRewards),
+                    address(rewardDistributor),
+                    address(spoolOwner)
+                )
+            )
+        );
+        vm.stopPrank();
+
+        vm.startPrank(user1);
+        vm.expectRevert();
+        spoolStaking.setStakingAllowed(false);
+        assertFalse(spoolStaking.stakingAllowed());
+        vm.stopPrank();
+
+        vm.startPrank(user1);
+        vm.expectRevert("SpoolStaking::stake staking is not allowed");
+        spoolStaking.stake(user1Stake2);
+        vm.stopPrank();
+
         vm.warp(startingBlockTimestamp + 157 weeks);
 
         vm.assertEq(voSpool.getTrancheIndex(block.timestamp), 158);
@@ -262,21 +289,6 @@ contract YelayMigratorTest is Test {
         }
         assertFalse(yelayStaking.migrationComplete());
         assertFalse(sYlay.migrationComplete());
-
-        vm.startPrank(owner);
-        proxyAdmin.upgrade(
-            TransparentUpgradeableProxy(payable(address(spoolStaking))),
-            address(
-                new SpoolStakingMigration(
-                    address(spool),
-                    address(voSpool),
-                    address(voSpoolRewards),
-                    address(rewardDistributor),
-                    address(spoolOwner)
-                )
-            )
-        );
-        vm.stopPrank();
 
         assertFalse(yelayStaking.migrationComplete());
         assertFalse(sYlay.migrationComplete());
@@ -392,6 +404,10 @@ contract YelayMigratorTest is Test {
             vm.warp(block.timestamp + 55 weeks);
             assertEq(sYlay.getUserGradualVotingPower(user1), 0);
         }
+
+        vm.startPrank(owner);
+        yelayStaking.setStakingStarted(true);
+        vm.stopPrank();
 
         // new staking part
         uint256 user2SecondStake = 100e18;
