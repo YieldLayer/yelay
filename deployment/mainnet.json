@@ -4,13 +4,34 @@
   "RewardsDistributor": "0x22bB10A016B1eb7bFFD304862051aA3fCe723F74",
   "SPOOL": "0x40803cEA2b2A32BdA1bE61d3604af6a814E70976",
   "SpoolOwner": "0x4f03f70A99E5c3b49d733dDd7458f80Fa9B5A5B5",
-  "spoolOwnerMultisig": "0xF6Bc2E3b1F939C435D9769D078a6e5048AaBD463",
   "SpoolStaking": "0xc3160C5cc63B6116DD182faA8393d3AD9313e213",
+  "SpoolStakingMigrationImplementation": "0xD3eC339De3651dbF390b411EC80AB67c17430E76",
   "YLAY": {
-    "implementation": "0x0D6b186eA83122bbcb5812fF6201c188e20eCFCD",
+    "implementation": "0x48aA14179e123Ab5a042AA04ABDA63D7aF52dBFa",
     "proxy": "0xAEe5913FFd19dBcA4Fd1eF6F3925ed0414407d37"
   },
+  "YelayMigrator": {
+    "implementation": "0x37A68092D8F794a5c8e48fb41798c010D48892D7",
+    "proxy": "0x0417f4d322d1AB133158C91765a4b8BAA08fdD8A"
+  },
   "YelayOwner": "0xAB865D95A574511a6c893C38A4D892275ca70570",
+  "YelayRewardsDistributor": {
+    "implementation": "0x98feDdFdf4cB0b1813a7969fdBac5AECDa8c6992",
+    "proxy": "0x3E246beb1A0daF94FB376C44cAc2D1C8B979C0d0"
+  },
+  "YelayStaking": {
+    "implementation": "0x9B3cBdbC97605d8f5c0e9f4822BA59e902Fd4360",
+    "proxy": "0x8e933387AFc6F0F67588e5Dac33EBa97eF988C69"
+  },
+  "sYLAY": {
+    "implementation": "0xdAac6595737a6a6F7EE7A84c00B529D5F2742B45",
+    "proxy": "0xC0F7B477e05B29097546dAae2E3dF2decBeB405d"
+  },
+  "sYLAYRewards": {
+    "implementation": "0xD385289455a52Fac2893a9218477C57eFc1Cdd36",
+    "proxy": "0x705f023b2Ce85B0c7039B43C8e217F61a3A3bb13"
+  },
+  "spoolOwnerMultisig": "0xF6Bc2E3b1F939C435D9769D078a6e5048AaBD463",
   "voSpool": "0xaF56D16a7fe479F2fcD48FF567fF589CB2d2a0E9",
   "voSpoolRewards": "0xB8d5Fc11F8E1Af30578dB9F77174A1DC171a7D28",
   "yelayMultisig": "0x4e736b96920a0f305022CBaAea493Ce7e49Eee6C"
