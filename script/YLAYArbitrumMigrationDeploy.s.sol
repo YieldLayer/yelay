@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 
 import {JsonReadWriter, Environment} from "./helpers.sol";
 
-import "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 import {YLAYArbitrumMigration} from "src/YLAYArbitrumMigration.sol";
 
@@ -21,10 +21,11 @@ contract YLAYArbitrumMigrationDeploy is Script {
 
         vm.startBroadcast(Environment.getPrivateKey(vm));
 
-        address ylayArbitrumMigration = address(new YLAYArbitrumMigration());
+        address implementation = address(new YLAYArbitrumMigration());
+        address proxy = address(new TransparentUpgradeableProxy(implementation, json.getAddress(".ProxyAdmin"), ""));
 
         vm.stopBroadcast();
 
-        json.add("YLAYArbitrumMigration", ylayArbitrumMigration);
+        json.addProxy("YLAYArbitrumMigration", implementation, proxy);
     }
 }

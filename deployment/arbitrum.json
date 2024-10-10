@@ -1,0 +1,7 @@
+{
+  "ProxyAdmin": "0x9d50AfCA9903A787556642319A202Dd12a129151",
+  "YLAYArbitrumMigration": {
+    "implementation": "0x7E08653158182A402b3a788E75A125c876c5ECe5",
+    "proxy": "0xeac44dC9bB6E6CEf3F832FF5ee32455e5E9082BB"
+  }
+}
