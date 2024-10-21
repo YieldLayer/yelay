@@ -194,7 +194,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
      */
     function totalSupply() external view override returns (uint256) {
         (GlobalGradual memory global,) = _getUpdatedGradual();
-        return totalInstantPower + _getTotalGradualVotingPower(global);
+        return totalInstantPower + _getTotalGradualVotingPower(global) + totalLockupPower;
     }
 
     /**
@@ -203,7 +203,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     function balanceOf(address account) external view override returns (uint256) {
         (UserGradual memory _userGradual,) = _getUpdatedGradualUser(account);
 
-        return userInstantPower[account] + _getUserGradualVotingPower(_userGradual);
+        return userInstantPower[account] + _getUserGradualVotingPower(_userGradual) + userLockupPower[account];
     }
 
     /**
