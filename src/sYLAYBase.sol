@@ -153,6 +153,21 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     /// @dev mapping users to its tranches
     mapping(address => mapping(uint256 => UserTranches)) public userTranches;
 
+    uint256 public totalLockupPower;
+
+    mapping(address => uint256) public userLockupPower;
+
+    struct Lockup {
+        uint256 amount;
+        uint256 power;
+        uint256 start;
+        uint256 deadline;
+    }
+
+    mapping(address => mapping(uint256 => Lockup)) public userToTrancheIndexToLockup;
+
+    // mapping(address => )
+
     /* ========== CONSTRUCTOR ========== */
 
     /**
@@ -394,6 +409,76 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         unchecked {
             return getCurrentTrancheIndex() - 1;
         }
+    }
+
+    /* ---------- LOCKUP POWER ---------- */
+
+    function mintLockup(address to, uint256 amount, uint256 trancheIndexDeadline) external onlyGradualMinter {
+        uint256 currentTrancheIndex = getCurrentTrancheIndex();
+        // deadline should be in the future
+        require(trancheIndexDeadline > currentTrancheIndex + 1);
+        uint256 lockupPeriod = trancheIndexDeadline - currentTrancheIndex;
+        // lockup should be less then whole period of 4 years
+        require(lockupPeriod <= FULL_POWER_TRANCHES_COUNT);
+
+        Lockup storage userLockup = userToTrancheIndexToLockup[to][currentTrancheIndex];
+        if (userLockup.amount > 0) {
+            // we allow to add to new position only with the same deadline
+            require(userLockup.deadline == trancheIndexDeadline);
+        }
+
+        // calculate the user lockup power
+        uint256 lockupPower = amount * lockupPeriod / FULL_POWER_TRANCHES_COUNT;
+        // update globals
+        totalLockupPower += lockupPower;
+        userLockupPower[to] += lockupPower;
+
+        // update user specific data
+        userLockup.amount += amount;
+        userLockup.power += lockupPower;
+        userLockup.deadline = trancheIndexDeadline;
+        userLockup.start = currentTrancheIndex;
+    }
+
+    function burnLockup(address to, uint256 trancheIndexDeadline) external onlyGradualMinter {
+        uint256 currentTrancheIndex = getCurrentTrancheIndex();
+        // the deadline of the lockup should have passed
+        require(trancheIndexDeadline < currentTrancheIndex);
+
+        Lockup memory userLockup = userToTrancheIndexToLockup[to][trancheIndexDeadline];
+
+        // reduce global lockup powers
+        totalLockupPower -= userLockup.power;
+        userLockupPower[to] -= userLockup.power;
+
+        // remove user position
+        delete userToTrancheIndexToLockup[to][currentTrancheIndex];
+    }
+
+    function continueLockup(address to, uint256 currentTrancheIndexDeadline, uint256 newTrancheIndexDeadline)
+        external
+        onlyGradualMinter
+    {
+        uint256 currentTrancheIndex = getCurrentTrancheIndex();
+        // new lockup deadline should be in the future
+        require(newTrancheIndexDeadline > currentTrancheIndex);
+        Lockup storage userLockup = userToTrancheIndexToLockup[to][currentTrancheIndexDeadline];
+        // there should be lockup position to prolong
+        require(userLockup.amount > 0);
+        uint256 wholeLockupPeriod = newTrancheIndexDeadline - userLockup.start;
+        // whole lockup period should not exceed 4 years
+        require(wholeLockupPeriod <= FULL_POWER_TRANCHES_COUNT);
+
+        // calculate added lockup power
+        uint256 extendedLockupPeriod = newTrancheIndexDeadline - userLockup.deadline;
+        uint256 lockupPower = userLockup.amount * extendedLockupPeriod / FULL_POWER_TRANCHES_COUNT;
+        // update global lockup powers
+        totalLockupPower += lockupPower;
+        userLockupPower[to] += lockupPower;
+
+        // adjust user specific lockup position
+        userLockup.power += lockupPower;
+        userLockup.deadline = newTrancheIndexDeadline;
     }
 
     /* ---------- GRADUAL POWER: MINT FUNCTIONS ---------- */
