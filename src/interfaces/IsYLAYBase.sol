@@ -31,6 +31,14 @@ interface IsYLAYBase {
 
     function getLastFinishedTrancheIndex() external view returns (uint16);
 
+    function migrateToLockup(address to, UserTranchePosition memory userTranchePosition, uint256 lockTranches) external returns(uint256 amount);
+
+    function mintLockup(address to, uint256 amount, uint256 lockTranches) external;
+
+    function burnLockup(address to, uint256 lockTranche) external returns(uint256 amount);
+
+    function continueLockup(uint256 lockTranche, uint256 numTranches) external;
+
     /* ========== EVENTS ========== */
 
     event Minted(address indexed recipient, uint256 amount);
@@ -40,6 +48,12 @@ interface IsYLAYBase {
     event GradualMinted(address indexed recipient, uint256 amount);
 
     event GradualBurned(address indexed source, uint256 amount, bool burnAll);
+
+    event LockupMinted(address indexed to, uint256 amount, uint256 power, uint256 startTranche, uint256 endTranche);
+
+    event LockupBurned(address indexed to, uint256 lockTranche);
+
+    event LockupContinued(address indexed to, uint256 lockTranche, uint256 addedPower, uint256 endTranche);
 
     event GlobalGradualUpdated(
         uint16 indexed lastUpdatedTrancheIndex,

@@ -412,23 +412,125 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     }
 
     /* ---------- LOCKUP POWER ---------- */
+    
+    /**
+     * @notice migrate user tranche to lockup
+     * @dev user gradual power is reduced by the amount of the tranche and added to lockup system.
+     * @param to user to migrate
+     * @param userTranchePosition user tranche with amount
+     * @param lockTranches number of tranches to lockup
+     */
+    function migrateToLockup(address to, UserTranchePosition memory userTranchePosition, uint256 lockTranches) external onlyGradualMinter updateGradual updateGradualUser(to) returns(uint256 amount) {
 
-    function mintLockup(address to, uint256 amount, uint256 trancheIndexDeadline) external onlyGradualMinter {
+        UserTranche storage tranche;
+        UserTranches storage _userTranches = userTranches[to][userTranchePosition.arrayIndex];
+
+        if (userTranchePosition.position == 0) {
+            tranche = _userTranches.zero;
+        } else if (userTranchePosition.position == 1) {
+            tranche = _userTranches.one;
+        } else if (userTranchePosition.position == 2) {
+            tranche = _userTranches.two;
+        } else {
+            tranche = _userTranches.three;
+        }
+        
+        _mintLockup(to, amount, tranche.index, lockTranches);
+
+        amount = tranche.amount;
+        // reduce user gradual maturing amount
+        _userGraduals[to].maturingAmount -= tranche.amount;
+
+        // we leave _userGraduals[to].rawUnmaturedVotingPower as-is. the accumulated power (in rawUnmaturedVotingPower) up to this point will continue to be a part of the balance until such point as the user unstakes, which destroys all gradual power in the normal gradual accrual process. 
+
+        // maturation of the tranche chosen here has no effect on the system, as tranche amount is now 0. we could try to remove this tranche here but this could introduce issues, so we let it gracefully mature with amount 0.
+        tranche.amount = 0;
+    }
+
+    /*
+     * @notice mint new lockup position
+     * @dev mint new lockup position for user. This is new stake being introcuded to the system.
+     * @param to user to mint Lockup
+     * @param amount amount to mint
+     * @param lockTranches number of tranches to lockup
+     */
+    function mintLockup(address to, uint256 amount, uint256 lockTranches) external onlyGradualMinter {
+        _mintLockup(to, amount, getCurrentTrancheIndex(), lockTranches);
+    }
+    
+    /**
+     * @notice burn lockup position
+     * @dev burn lockup position for user. This is stake being removed from the system, after the deadline has passed.
+     * @param to user to burn Lockup
+     * @param lockTranche tranche index of the lockup
+     */
+    function burnLockup(address to, uint256 lockTranche) external onlyGradualMinter returns(uint256 amount) {
         uint256 currentTrancheIndex = getCurrentTrancheIndex();
-        // deadline should be in the future
-        require(trancheIndexDeadline > currentTrancheIndex + 1);
-        uint256 lockupPeriod = trancheIndexDeadline - currentTrancheIndex;
-        // lockup should be less then whole period of 4 years
-        require(lockupPeriod <= FULL_POWER_TRANCHES_COUNT);
+        Lockup storage userLockup = userToTrancheIndexToLockup[to][lockTranche];
+
+        // the deadline of the lockup should have passed
+        require(currentTrancheIndex >= userLockup.deadline);
+
+        // reduce global lockup powers
+        totalLockupPower -= userLockup.power;
+        userLockupPower[to] -= userLockup.power;
+        amount = userLockup.amount;
+
+        emit LockupBurned(to, lockTranche);
+
+        // remove user position
+        delete userToTrancheIndexToLockup[to][lockTranche];
+    }
+
+    /**
+     * @notice continue lockup position
+     * @dev 
+     *  - continue lockup position for user. This is stake being prolonged in the system. Prolonging is allowed either during or after lock expiry. 
+     *  - unlike the other functions, the user interacts with this function directly. There is no need to go through the gradual minter here.
+     * @param lockTranche tranche index of the lockup
+     * @param numTranches number of tranches to prolong
+     */
+    function continueLockup(uint256 lockTranche, uint256 numTranches)
+        external
+    {
+        Lockup storage userLockup = userToTrancheIndexToLockup[msg.sender][lockTranche];
+        // there should be lockup position to prolong
+        require(userLockup.amount > 0);
+
+        // total deadline should be less than 4 years
+        uint256 endTranche = userLockup.deadline + numTranches;
+        uint256 periodTranches = endTranche - userLockup.start;
+        // whole lockup period should not exceed 4 years
+        require(periodTranches <= FULL_POWER_TRANCHES_COUNT);
+
+        // calculate added lockup power
+        uint256 addedPower = (userLockup.amount * numTranches) / FULL_POWER_TRANCHES_COUNT;
+        // update global lockup powers
+        totalLockupPower += addedPower;
+        userLockupPower[msg.sender] += addedPower;
+
+        // adjust user specific lockup position
+        userLockup.power += addedPower;
+        userLockup.deadline = endTranche;
+        
+        emit LockupContinued(msg.sender, lockTranche, addedPower, endTranche);
+    }
+    
+    function _mintLockup(address to, uint256 amount, uint256 startTranche, uint256 lockTranches) internal {
+        // total lockup should be less then whole period of 4 years
+        uint256 currentTrancheIndex = getCurrentTrancheIndex();
+        require((currentTrancheIndex - startTranche) + lockTranches <= FULL_POWER_TRANCHES_COUNT);
+
+        uint256 endTranche = currentTrancheIndex + lockTranches;
 
         Lockup storage userLockup = userToTrancheIndexToLockup[to][currentTrancheIndex];
         if (userLockup.amount > 0) {
             // we allow to add to new position only with the same deadline
-            require(userLockup.deadline == trancheIndexDeadline);
+            require(userLockup.deadline == endTranche);
         }
 
         // calculate the user lockup power
-        uint256 lockupPower = amount * lockupPeriod / FULL_POWER_TRANCHES_COUNT;
+        uint256 lockupPower = amount * lockTranches / FULL_POWER_TRANCHES_COUNT;
         // update globals
         totalLockupPower += lockupPower;
         userLockupPower[to] += lockupPower;
@@ -436,50 +538,12 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         // update user specific data
         userLockup.amount += amount;
         userLockup.power += lockupPower;
-        userLockup.deadline = trancheIndexDeadline;
-        userLockup.start = currentTrancheIndex;
+        userLockup.deadline = endTranche;
+        userLockup.start = startTranche;
+
+        emit LockupMinted(to, amount, lockupPower, currentTrancheIndex, endTranche);
     }
 
-    function burnLockup(address to, uint256 trancheIndexDeadline) external onlyGradualMinter {
-        uint256 currentTrancheIndex = getCurrentTrancheIndex();
-        // the deadline of the lockup should have passed
-        require(trancheIndexDeadline < currentTrancheIndex);
-
-        Lockup memory userLockup = userToTrancheIndexToLockup[to][trancheIndexDeadline];
-
-        // reduce global lockup powers
-        totalLockupPower -= userLockup.power;
-        userLockupPower[to] -= userLockup.power;
-
-        // remove user position
-        delete userToTrancheIndexToLockup[to][currentTrancheIndex];
-    }
-
-    function continueLockup(address to, uint256 currentTrancheIndexDeadline, uint256 newTrancheIndexDeadline)
-        external
-        onlyGradualMinter
-    {
-        uint256 currentTrancheIndex = getCurrentTrancheIndex();
-        // new lockup deadline should be in the future
-        require(newTrancheIndexDeadline > currentTrancheIndex);
-        Lockup storage userLockup = userToTrancheIndexToLockup[to][currentTrancheIndexDeadline];
-        // there should be lockup position to prolong
-        require(userLockup.amount > 0);
-        uint256 wholeLockupPeriod = newTrancheIndexDeadline - userLockup.start;
-        // whole lockup period should not exceed 4 years
-        require(wholeLockupPeriod <= FULL_POWER_TRANCHES_COUNT);
-
-        // calculate added lockup power
-        uint256 extendedLockupPeriod = newTrancheIndexDeadline - userLockup.deadline;
-        uint256 lockupPower = userLockup.amount * extendedLockupPeriod / FULL_POWER_TRANCHES_COUNT;
-        // update global lockup powers
-        totalLockupPower += lockupPower;
-        userLockupPower[to] += lockupPower;
-
-        // adjust user specific lockup position
-        userLockup.power += lockupPower;
-        userLockup.deadline = newTrancheIndexDeadline;
-    }
 
     /* ---------- GRADUAL POWER: MINT FUNCTIONS ---------- */
 

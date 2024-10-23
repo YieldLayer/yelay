@@ -80,6 +80,13 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     /// @dev if address is 0, noone staked for address (or unstaking was permitted)
     mapping(address => address) public stakedBy;
 
+
+    /// @notice Total YLAY locked
+    uint256 public totalLocked;
+
+    /// @notice Account YLAY locked balance
+    mapping(address => uint256) public locked;
+
     /* ========== CONSTRUCTOR ========== */
 
     /**
@@ -207,6 +214,42 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         }
 
         emit Unstaked(msg.sender, amount);
+    }
+
+    // stake, and lock a new position.
+    function lock(uint256 amount, uint256 lockTranches) external nonReentrant {
+
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        sYlay.mintLockup(msg.sender, amount, lockTranches);
+
+        locked[msg.sender] += amount;
+        totalLocked += amount;
+    }
+
+    // unlock a user position.
+    function unlock(uint256 tranche) external nonReentrant {
+        // get amount from tranche
+        uint amount = sYlay.burnLockup(msg.sender, tranche);
+
+        // add back to balance
+        locked[msg.sender] -= amount;
+        totalLocked -= amount;
+
+        balances[msg.sender] += amount;
+        totalStaked += amount;
+    }
+
+
+    // lock an existing user tranche.
+    function lockTranche(IsYLAYBase.UserTranchePosition memory position, uint256 lockTranches) external nonReentrant {
+        uint256 amount = sYlay.migrateToLockup(msg.sender, position, lockTranches);
+
+        locked[msg.sender] += amount;
+        totalLocked += amount;
+
+        balances[msg.sender] -= amount;
+        totalStaked -= amount;
     }
 
     function _getRewardForCompound(address account, bool doCompoundsYlayRewards)
