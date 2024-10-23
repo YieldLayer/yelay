@@ -31,11 +31,13 @@ interface IsYLAYBase {
 
     function getLastFinishedTrancheIndex() external view returns (uint16);
 
-    function migrateToLockup(address to, UserTranchePosition memory userTranchePosition, uint256 lockTranches) external returns(uint256 amount);
+    function migrateToLockup(address to, UserTranchePosition memory userTranchePosition, uint256 lockTranches)
+        external
+        returns (uint256 amount);
 
     function mintLockup(address to, uint256 amount, uint256 lockTranches) external;
 
-    function burnLockup(address to, uint256 lockTranche) external returns(uint256 amount);
+    function burnLockup(address to, uint256 lockTranche) external returns (uint256 amount);
 
     function continueLockup(uint256 lockTranche, uint256 numTranches) external;
 

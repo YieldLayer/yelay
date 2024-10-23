@@ -412,7 +412,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     }
 
     /* ---------- LOCKUP POWER ---------- */
-    
+
     /**
      * @notice migrate user tranche to lockup
      * @dev user gradual power is reduced by the amount of the tranche and added to lockup system.
@@ -420,8 +420,13 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
      * @param userTranchePosition user tranche with amount
      * @param lockTranches number of tranches to lockup
      */
-    function migrateToLockup(address to, UserTranchePosition memory userTranchePosition, uint256 lockTranches) external onlyGradualMinter updateGradual updateGradualUser(to) returns(uint256 amount) {
-
+    function migrateToLockup(address to, UserTranchePosition memory userTranchePosition, uint256 lockTranches)
+        external
+        onlyGradualMinter
+        updateGradual
+        updateGradualUser(to)
+        returns (uint256 amount)
+    {
         UserTranche storage tranche;
         UserTranches storage _userTranches = userTranches[to][userTranchePosition.arrayIndex];
 
@@ -434,14 +439,14 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         } else {
             tranche = _userTranches.three;
         }
-        
+
         _mintLockup(to, amount, tranche.index, lockTranches);
 
         amount = tranche.amount;
         // reduce user gradual maturing amount
         _userGraduals[to].maturingAmount -= tranche.amount;
 
-        // we leave _userGraduals[to].rawUnmaturedVotingPower as-is. the accumulated power (in rawUnmaturedVotingPower) up to this point will continue to be a part of the balance until such point as the user unstakes, which destroys all gradual power in the normal gradual accrual process. 
+        // we leave _userGraduals[to].rawUnmaturedVotingPower as-is. the accumulated power (in rawUnmaturedVotingPower) up to this point will continue to be a part of the balance until such point as the user unstakes, which destroys all gradual power in the normal gradual accrual process.
 
         // maturation of the tranche chosen here has no effect on the system, as tranche amount is now 0. we could try to remove this tranche here but this could introduce issues, so we let it gracefully mature with amount 0.
         tranche.amount = 0;
@@ -457,14 +462,14 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     function mintLockup(address to, uint256 amount, uint256 lockTranches) external onlyGradualMinter {
         _mintLockup(to, amount, getCurrentTrancheIndex(), lockTranches);
     }
-    
+
     /**
      * @notice burn lockup position
      * @dev burn lockup position for user. This is stake being removed from the system, after the deadline has passed.
      * @param to user to burn Lockup
      * @param lockTranche tranche index of the lockup
      */
-    function burnLockup(address to, uint256 lockTranche) external onlyGradualMinter returns(uint256 amount) {
+    function burnLockup(address to, uint256 lockTranche) external onlyGradualMinter returns (uint256 amount) {
         uint256 currentTrancheIndex = getCurrentTrancheIndex();
         Lockup storage userLockup = userToTrancheIndexToLockup[to][lockTranche];
 
@@ -484,15 +489,13 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
 
     /**
      * @notice continue lockup position
-     * @dev 
-     *  - continue lockup position for user. This is stake being prolonged in the system. Prolonging is allowed either during or after lock expiry. 
+     * @dev
+     *  - continue lockup position for user. This is stake being prolonged in the system. Prolonging is allowed either during or after lock expiry.
      *  - unlike the other functions, the user interacts with this function directly. There is no need to go through the gradual minter here.
      * @param lockTranche tranche index of the lockup
      * @param numTranches number of tranches to prolong
      */
-    function continueLockup(uint256 lockTranche, uint256 numTranches)
-        external
-    {
+    function continueLockup(uint256 lockTranche, uint256 numTranches) external {
         Lockup storage userLockup = userToTrancheIndexToLockup[msg.sender][lockTranche];
         // there should be lockup position to prolong
         require(userLockup.amount > 0);
@@ -512,10 +515,10 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         // adjust user specific lockup position
         userLockup.power += addedPower;
         userLockup.deadline = endTranche;
-        
+
         emit LockupContinued(msg.sender, lockTranche, addedPower, endTranche);
     }
-    
+
     function _mintLockup(address to, uint256 amount, uint256 startTranche, uint256 lockTranches) internal {
         // total lockup should be less then whole period of 4 years
         uint256 currentTrancheIndex = getCurrentTrancheIndex();
@@ -543,7 +546,6 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
 
         emit LockupMinted(to, amount, lockupPower, currentTrancheIndex, endTranche);
     }
-
 
     /* ---------- GRADUAL POWER: MINT FUNCTIONS ---------- */
 
