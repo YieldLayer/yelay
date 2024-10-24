@@ -51,6 +51,8 @@ interface IsYLAYBase {
 
     event GradualBurned(address indexed source, uint256 amount, bool burnAll);
 
+    event TrancheMigration(address indexed user, uint256 amount, uint256 index, uint256 rawUnmaturedVotingPower);
+
     event LockupMinted(address indexed to, uint256 amount, uint256 power, uint256 startTranche, uint256 endTranche);
 
     event LockupBurned(address indexed to, uint256 lockTranche);

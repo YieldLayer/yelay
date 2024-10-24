@@ -416,6 +416,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     /**
      * @notice migrate user tranche to lockup
      * @dev user gradual power is reduced by the amount of the tranche and added to lockup system.
+     * @dev rather than delete the user tranche we just set it to 0, so it can gracefully mature without deep updates to other aspects of the system.
      * @param to user to migrate
      * @param userTranchePosition user tranche with amount
      * @param lockTranches number of tranches to lockup
@@ -425,31 +426,38 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         onlyGradualMinter
         updateGradual
         updateGradualUser(to)
-        returns (uint256 amount)
+        returns (uint256)
     {
-        UserTranche storage tranche;
-        UserTranches storage _userTranches = userTranches[to][userTranchePosition.arrayIndex];
+        // get user tranche
+        UserTranche storage tranche = _getUserTrancheStorage(to, userTranchePosition);
 
-        if (userTranchePosition.position == 0) {
-            tranche = _userTranches.zero;
-        } else if (userTranchePosition.position == 1) {
-            tranche = _userTranches.one;
-        } else if (userTranchePosition.position == 2) {
-            tranche = _userTranches.two;
-        } else {
-            tranche = _userTranches.three;
-        }
+        // get global tranche
+        Tranche storage globalTranche = _getTranche(tranche.index);
+
+
+        // get amount and power earned for this tranche
+        uint48 amount = tranche.amount;
+        uint56 rawUnmaturedVotingPower = uint56(amount * (getLastFinishedTrancheIndex() - tranche.index));
+
+        // ensure tranche has not already been migrated
+        require(amount > 0, "sYLAY::migrateToLockup: Tranche already migrated");
+
+        // reduce user and global graduals
+        _userGraduals[to].maturingAmount -= amount;
+        _globalGradual.totalMaturingAmount -= amount;
+
+        _userGraduals[to].rawUnmaturedVotingPower -= rawUnmaturedVotingPower;
+        _globalGradual.totalRawUnmaturedVotingPower -= rawUnmaturedVotingPower;
+
+        // reduce user and global tranches 
+        tranche.amount = 0;
+        globalTranche.amount -= amount;
 
         _mintLockup(to, amount, tranche.index, lockTranches);
 
-        amount = tranche.amount;
-        // reduce user gradual maturing amount
-        _userGraduals[to].maturingAmount -= tranche.amount;
+        emit TrancheMigration(to, amount, tranche.index, rawUnmaturedVotingPower);
 
-        // we leave _userGraduals[to].rawUnmaturedVotingPower as-is. the accumulated power (in rawUnmaturedVotingPower) up to this point will continue to be a part of the balance until such point as the user unstakes, which destroys all gradual power in the normal gradual accrual process.
-
-        // maturation of the tranche chosen here has no effect on the system, as tranche amount is now 0. we could try to remove this tranche here but this could introduce issues, so we let it gracefully mature with amount 0.
-        tranche.amount = 0;
+        return amount;
     }
 
     /*
@@ -1061,6 +1069,31 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         private
         view
         returns (UserTranche memory tranche)
+    {
+        UserTranches storage _userTranches = userTranches[user][userTranchePosition.arrayIndex];
+
+        if (userTranchePosition.position == 0) {
+            tranche = _userTranches.zero;
+        } else if (userTranchePosition.position == 1) {
+            tranche = _userTranches.one;
+        } else if (userTranchePosition.position == 2) {
+            tranche = _userTranches.two;
+        } else {
+            tranche = _userTranches.three;
+        }
+    }
+
+    /**
+     * @notice gets `user` `tranche` at position
+     *
+     * @param user user address to get tranche from
+     * @param userTranchePosition position to get the `tranche` from
+     * @return tranche `user` tranche (storage pointer)
+     */
+    function _getUserTrancheStorage(address user, UserTranchePosition memory userTranchePosition)
+        private
+        view
+        returns (UserTranche storage tranche)
     {
         UserTranches storage _userTranches = userTranches[user][userTranchePosition.arrayIndex];
 
