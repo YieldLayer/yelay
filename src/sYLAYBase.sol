@@ -166,6 +166,9 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
 
     mapping(address => mapping(uint256 => Lockup)) public userToTrancheIndexToLockup;
 
+    // tightly packed lockup tranche indexes
+    mapping(address => uint16[]) public userLockupIndexes;
+
     // mapping(address => )
 
     /* ========== CONSTRUCTOR ========== */
@@ -434,13 +437,12 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         // get global tranche
         Tranche storage globalTranche = _getTranche(tranche.index);
 
-
         // get amount and power earned for this tranche
         uint48 amount = tranche.amount;
         uint56 rawUnmaturedVotingPower = uint56(amount * (getLastFinishedTrancheIndex() - tranche.index));
 
-        // ensure tranche has not already been migrated
-        require(amount > 0, "sYLAY::migrateToLockup: Tranche already migrated");
+        // ensure tranche has not already been locked
+        require(amount > 0, "sYLAY::migrateToLockup: Tranche already locked");
 
         // reduce user and global graduals
         _userGraduals[to].maturingAmount -= amount;
@@ -449,7 +451,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         _userGraduals[to].rawUnmaturedVotingPower -= rawUnmaturedVotingPower;
         _globalGradual.totalRawUnmaturedVotingPower -= rawUnmaturedVotingPower;
 
-        // reduce user and global tranches 
+        // reduce user and global tranches
         tranche.amount = 0;
         globalTranche.amount -= amount;
 
@@ -471,19 +473,24 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         _mintLockup(to, amount, getCurrentTrancheIndex(), lockTranches);
     }
 
-    /**
-     * @notice burn lockup position
-     * @dev burn lockup position for user. This is stake being removed from the system, after the deadline has passed.
-     * @param to user to burn Lockup
-     * @param lockTranche tranche index of the lockup
-     */
-    function burnLockup(address to, uint256 lockTranche) external onlyGradualMinter returns (uint256 amount) {
+    function burnLockups(address to) external onlyGradualMinter returns (uint256 amount) {
         uint256 currentTrancheIndex = getCurrentTrancheIndex();
-        Lockup storage userLockup = userToTrancheIndexToLockup[to][lockTranche];
+        uint16[] storage userLockupIndexes_ = userLockupIndexes[to];
+        uint256 userLockupCount_ = userLockupIndexes_.length;
+        for (uint256 i = 0; i < userLockupCount_; i++) {
+            uint16 lockTranche = userLockupIndexes_[i];
+            Lockup storage userLockup = userToTrancheIndexToLockup[to][lockTranche];
 
-        // the deadline of the lockup should have passed
-        require(currentTrancheIndex >= userLockup.deadline);
+            if (_validBurn(currentTrancheIndex, userLockup)) {
+                amount += _burnLockup(userLockup, to, lockTranche);
+            }
+        }
+    }
 
+    function _burnLockup(Lockup storage userLockup, address to, uint256 lockTranche)
+        internal
+        returns (uint256 amount)
+    {
         // reduce global lockup powers
         totalLockupPower -= userLockup.power;
         userLockupPower[to] -= userLockup.power;
@@ -493,6 +500,11 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
 
         // remove user position
         delete userToTrancheIndexToLockup[to][lockTranche];
+    }
+
+    function _validBurn(uint256 currentTrancheIndex, Lockup storage userLockup) internal view returns (bool) {
+        // the lock should not be burned already and the deadline of the lock should have passed
+        return (userLockup.amount > 0 && currentTrancheIndex >= userLockup.deadline);
     }
 
     /**
@@ -508,7 +520,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         // there should be lockup position to prolong
         require(userLockup.amount > 0);
 
-        // total deadline should be less than 4 years
+        // total deadline should be less than FULL_POWER_TRANCHES_COUNT (4 years)
         uint256 endTranche = userLockup.deadline + numTranches;
         uint256 periodTranches = endTranche - userLockup.start;
         // whole lockup period should not exceed 4 years
@@ -538,6 +550,8 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         if (userLockup.amount > 0) {
             // we allow to add to new position only with the same deadline
             require(userLockup.deadline == endTranche);
+        } else {
+            userLockupIndexes[to].push(uint16(currentTrancheIndex));
         }
 
         // calculate the user lockup power

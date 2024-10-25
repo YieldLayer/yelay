@@ -198,6 +198,16 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         require(amount > 0, "YelayStaking::unstake: Cannot withdraw 0");
         require(amount <= balances[msg.sender], "YelayStaking::unstake: Cannot unstake more than staked");
 
+        uint256 amountUnlocked = sYlay.burnLockups(msg.sender);
+
+        unchecked {
+            totalLocked = totalLocked -= amountUnlocked;
+            locked[msg.sender] -= amountUnlocked;
+        }
+
+        uint256 available = balances[msg.sender] - locked[msg.sender];
+        require(amount <= available, "YelayStaking::unstake: Unavailable amount requested");
+
         unchecked {
             totalStaked = totalStaked -= amount;
             balances[msg.sender] -= amount;
@@ -215,38 +225,34 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         emit Unstaked(msg.sender, amount);
     }
 
-    // stake, and lock a new position.
+    // stake, and create a lock.
     function lock(uint256 amount, uint256 lockTranches) external nonReentrant {
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        require(amount > 0, "YelayStaking::_lock: Cannot lock 0");
 
         sYlay.mintLockup(msg.sender, amount, lockTranches);
 
-        locked[msg.sender] += amount;
-        totalLocked += amount;
-    }
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
 
-    // unlock a user position.
-    function unlock(uint256 tranche) external nonReentrant {
-        // get amount from tranche
-        uint256 amount = sYlay.burnLockup(msg.sender, tranche);
+        unchecked {
+            totalLocked = totalLocked += amount;
+            locked[msg.sender] += amount;
+            totalStaked = totalStaked += amount;
+            balances[msg.sender] += amount;
+        }
 
-        // add back to balance
-        locked[msg.sender] -= amount;
-        totalLocked -= amount;
-
-        balances[msg.sender] += amount;
-        totalStaked += amount;
+        emit Locked(msg.sender, amount, lockTranches);
     }
 
     // lock an existing user tranche.
     function lockTranche(IsYLAYBase.UserTranchePosition memory position, uint256 lockTranches) external nonReentrant {
         uint256 amount = sYlay.migrateToLockup(msg.sender, position, lockTranches);
 
-        locked[msg.sender] += amount;
-        totalLocked += amount;
+        unchecked {
+            totalLocked = totalLocked += amount;
+            locked[msg.sender] += amount;
+        }
 
-        balances[msg.sender] -= amount;
-        totalStaked -= amount;
+        emit LockedTranche(msg.sender, amount, lockTranches);
     }
 
     function _getRewardForCompound(address account, bool doCompoundsYlayRewards)
