@@ -174,7 +174,7 @@ contract YelayStakingLockupTest is Test, Utilities {
     }
 
     /* ---------------------------------------------------------
-    |                 Section 1: Scenario A                    |
+    |                  Scenario A                              |
     ------------------------------------------------------------
     | week |        action              | sYLAY (user balance) |
     |-----------------------------------------------------------
@@ -191,6 +191,7 @@ contract YelayStakingLockupTest is Test, Utilities {
 
     function test_shouldSatisfyScenarioA() public {
         // user stakes 1000
+        uint256 lockTranche = sYlay.getCurrentTrancheIndex();
 
         vm.prank(user1);
         yelayStaking.stake(1000 ether);
@@ -201,10 +202,9 @@ contract YelayStakingLockupTest is Test, Utilities {
         assertApproxEqRel(sYlay.balanceOf(user1), 211.53846 ether, 1e10);
 
         // locks for 100 weeks
-        uint256 lockTranche = sYlay.getCurrentTrancheIndex();
-
+        uint256 deadline = sYlay.getCurrentTrancheIndex() + 100;
         vm.prank(user1);
-        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), 100);
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), deadline);
         assertApproxEqRel(sYlay.balanceOf(user1), 692.30769 ether, 1e10);
 
         // lock ends (no user action)
@@ -213,9 +213,10 @@ contract YelayStakingLockupTest is Test, Utilities {
 
         vm.warp(block.timestamp + 15 weeks); // week 160
 
-        // continue lock for 40 more weeks (ie. 55 weeks from lock end)
+        // continue lock for 40 more weeks
+        uint256 deadline2 = sYlay.getCurrentTrancheIndex() + 40;
         vm.prank(user1);
-        sYlay.continueLockup(lockTranche, 55);
+        sYlay.continueLockup(lockTranche, deadline2);
         assertApproxEqRel(sYlay.balanceOf(user1), 956.73076 ether, 1e10);
 
         //// lock ends (no user action)
@@ -233,5 +234,113 @@ contract YelayStakingLockupTest is Test, Utilities {
         assertEq(yelayStaking.balances(user1), 0);
         assertEq(sYlay.balanceOf(user1), 0);
         assertEq(received, 1000 ether);
+    }
+
+    /* -----------------------------------------------------------------------------------------------------
+    |                           Scenario B                                                                |
+    |-------------------------------------------------------------------------------------------------------
+    |- stake 3 times: 10k 15k 20k, at 3 different points (week 10, week 20, week 30).                      | 
+    |- lock each for 30 weeks.                                                                             |      
+    |- skip forward to unlock the first 2 stakes.                                                          |       
+    |- unstake.                                                                                            |      
+    |- ensure sylay balance is only the sYLAY from the 3rd lock; ie. all sYLAY burned from other locks.    |       
+    ----------------------------------------------------------------------------------------------------- */
+
+    function test_shouldSatisfyScenarioB() public {
+        // stake 10k
+        vm.prank(user1);
+        yelayStaking.stake(10000 ether);
+        assertEq(yelayStaking.balances(user1), 10000 ether);
+
+        // lock for 30 weeks
+        uint256 deadline = sYlay.getCurrentTrancheIndex() + 30;
+        vm.prank(user1);
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), deadline);
+
+        vm.warp(block.timestamp + 10 weeks);
+
+        // stake 15k
+        vm.prank(user1);
+        yelayStaking.stake(15000 ether);
+        assertEq(yelayStaking.balances(user1), 25000 ether);
+
+        // lock for 30 weeks
+        deadline = sYlay.getCurrentTrancheIndex() + 30;
+        vm.prank(user1);
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 1), deadline);
+
+        vm.warp(block.timestamp + 10 weeks);
+
+        // stake 20k
+        vm.prank(user1);
+        yelayStaking.stake(20000 ether);
+        assertEq(yelayStaking.balances(user1), 45000 ether);
+
+        // lock for 30 weeks
+        deadline = sYlay.getCurrentTrancheIndex() + 208;
+        vm.prank(user1);
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 2), deadline);
+
+        // skip forward to unlock the first 2 stakes
+        vm.warp(block.timestamp + 30 weeks);
+
+        // unstake
+        uint256 balanceBefore = yLAY.balanceOf(user1);
+        vm.prank(user1);
+        yelayStaking.unstake(25000 ether);
+        uint256 received = yLAY.balanceOf(user1) - balanceBefore;
+        assertEq(received, 25000 ether);
+        assertEq(yelayStaking.balances(user1), 20000 ether);
+        assertEq(sYlay.balanceOf(user1), 20000 ether);
+    }
+
+    /* -----------------------------------------------------
+    |                   Scenario C                         |
+    |-------------------------------------------------------
+    |- stake 123.123123123123123123                        | 
+    |- lock for 100 weeks                                  |      
+    |- after 100 weeks, lock ends                          |       
+    |- in another 2 weeks, unstake, passing full amount    |      
+    |- ensure I get full amount back                       |       
+    ------------------------------------------------------ */
+    function test_shouldSatisfyScenarioC() public {
+        uint256 amount = 123.123123123123123123 ether;
+        vm.prank(user1);
+        yelayStaking.stake(123.123123123123123123 ether);
+        assertEq(yelayStaking.balances(user1), amount);
+        assertEq(sYlay.balanceOf(user1), 0);
+
+        // lock for 100 weeks
+        uint256 deadline = sYlay.getCurrentTrancheIndex() + 100;
+        vm.prank(user1);
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), deadline);
+
+        // lock ends (no user action)
+        vm.warp(block.timestamp + 100 weeks); // week 145
+
+        // unstake amount
+        uint256 balanceBefore = yLAY.balanceOf(user1);
+        vm.prank(user1);
+        yelayStaking.unstake(amount);
+        uint256 received = yLAY.balanceOf(user1) - balanceBefore;
+        assertEq(yelayStaking.balances(user1), 0);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(received, amount);
+
+        uint256 lockTranche = sYlay.getCurrentTrancheIndex();
+        vm.prank(user1);
+        yelayStaking.lock(amount, lockTranche + 100);
+
+        // lock ends (no user action)
+        vm.warp(block.timestamp + 100 weeks);
+
+        // unstake amount
+        balanceBefore = yLAY.balanceOf(user1);
+        vm.prank(user1);
+        yelayStaking.unstake(amount);
+        received = yLAY.balanceOf(user1) - balanceBefore;
+        assertEq(yelayStaking.balances(user1), 0);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(received, amount);
     }
 }

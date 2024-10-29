@@ -208,6 +208,11 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         uint256 available = balances[msg.sender] - locked[msg.sender];
         require(amount <= available, "YelayStaking::unstake: Unavailable amount requested");
 
+        // need to mint a new gradual tranche if amount unlocked is more than amount
+        if (amountUnlocked > amount) {
+            sYlay.mintGradual(msg.sender, amountUnlocked - amount);
+        }
+
         unchecked {
             totalStaked = totalStaked -= amount;
             balances[msg.sender] -= amount;
@@ -226,33 +231,33 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     }
 
     // stake, and create a lock.
-    function lock(uint256 amount, uint256 lockTranches) external nonReentrant {
+    function lock(uint256 amount, uint256 deadline) external nonReentrant {
         require(amount > 0, "YelayStaking::_lock: Cannot lock 0");
 
-        sYlay.mintLockup(msg.sender, amount, lockTranches);
+        uint256 trimmedAmount = sYlay.mintLockup(msg.sender, amount, deadline);
 
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
 
         unchecked {
-            totalLocked = totalLocked += amount;
-            locked[msg.sender] += amount;
+            totalLocked = totalLocked += trimmedAmount;
+            locked[msg.sender] += trimmedAmount;
             totalStaked = totalStaked += amount;
             balances[msg.sender] += amount;
         }
 
-        emit Locked(msg.sender, amount, lockTranches);
+        emit Locked(msg.sender, amount, deadline);
     }
 
     // lock an existing user tranche.
-    function lockTranche(IsYLAYBase.UserTranchePosition memory position, uint256 lockTranches) external nonReentrant {
-        uint256 amount = sYlay.migrateToLockup(msg.sender, position, lockTranches);
+    function lockTranche(IsYLAYBase.UserTranchePosition calldata position, uint256 deadline) external nonReentrant {
+        uint256 trimmedAmount = sYlay.migrateToLockup(msg.sender, position, deadline);
 
         unchecked {
-            totalLocked = totalLocked += amount;
-            locked[msg.sender] += amount;
+            totalLocked = totalLocked += trimmedAmount;
+            locked[msg.sender] += trimmedAmount;
         }
 
-        emit LockedTranche(msg.sender, amount, lockTranches);
+        emit LockedTranche(msg.sender, trimmedAmount, deadline);
     }
 
     function _getRewardForCompound(address account, bool doCompoundsYlayRewards)

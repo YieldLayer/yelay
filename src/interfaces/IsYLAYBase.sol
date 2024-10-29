@@ -35,7 +35,7 @@ interface IsYLAYBase {
         external
         returns (uint256 amount);
 
-    function mintLockup(address to, uint256 amount, uint256 lockTranches) external;
+    function mintLockup(address to, uint256 amount, uint256 lockTranches) external returns (uint256);
 
     function continueLockup(uint256 lockTranche, uint256 numTranches) external;
 
