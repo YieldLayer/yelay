@@ -80,10 +80,10 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     /// @dev if address is 0, noone staked for address (or unstaking was permitted)
     mapping(address => address) public stakedBy;
 
-    /// @notice Total YLAY locked
+    /// @notice Total YLAY locked. subset of totalStaked
     uint256 public totalLocked;
 
-    /// @notice Account YLAY locked balance
+    /// @notice Account YLAY locked balance. subset of balances
     mapping(address => uint256) public locked;
 
     /* ========== CONSTRUCTOR ========== */
@@ -195,30 +195,18 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     }
 
     function unstake(uint256 amount) public nonReentrant notStakedBy updateRewards(msg.sender) {
-        require(amount > 0, "YelayStaking::unstake: Cannot withdraw 0");
-        require(amount <= balances[msg.sender], "YelayStaking::unstake: Cannot unstake more than staked");
-
+        // burn unlocked locks and get available amount to unstake now
         uint256 amountUnlocked = sYlay.burnLockups(msg.sender);
+        uint256 available = balances[msg.sender] - (locked[msg.sender] - amountUnlocked);
+        require(amount > 0 && amount <= available, "YelayStaking::unstake: Unavailable amount requested");
 
+        // update state
         unchecked {
             totalLocked -= amountUnlocked;
             locked[msg.sender] -= amountUnlocked;
-        }
-
-        uint256 available = balances[msg.sender] - locked[msg.sender];
-        require(amount <= available, "YelayStaking::unstake: Unavailable amount requested");
-
-        // need to mint a new gradual tranche if amount unlocked is more than amount
-        if (amountUnlocked > amount) {
-            sYlay.mintGradual(msg.sender, amountUnlocked - amount);
-        }
-
-        unchecked {
             totalStaked -= amount;
             balances[msg.sender] -= amount;
         }
-
-        stakingToken.safeTransfer(msg.sender, amount);
 
         // burn gradual sYLAY for the sender
         if (balances[msg.sender] == 0) {
@@ -227,10 +215,17 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
             sYlay.burnGradual(msg.sender, amount, false);
         }
 
+        // use excess YLAY from unlocking to mint gradual sYLAY for the sender
+        if (amountUnlocked > amount) {
+            sYlay.mintGradual(msg.sender, amountUnlocked - amount);
+        }
+
+        // transfer amount to user
+        stakingToken.safeTransfer(msg.sender, amount);
+
         emit Unstaked(msg.sender, amount);
     }
 
-    // stake, and create a lock.
     function lock(uint256 amount, uint256 deadline) external nonReentrant {
         require(amount > 0, "YelayStaking::_lock: Cannot lock 0");
 
@@ -248,7 +243,6 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         emit Locked(msg.sender, amount, deadline);
     }
 
-    // lock an existing user tranche.
     function lockTranche(IsYLAYBase.UserTranchePosition calldata position, uint256 deadline) external nonReentrant {
         uint256 trimmedAmount = sYlay.migrateToLockup(msg.sender, position, deadline);
 

@@ -33,7 +33,7 @@ interface IYelayStakingBase {
 
     event UnstakeAllowed(address indexed allowFor, address indexed allowBy);
 
-    event LockedTranche(address indexed user, uint256 amount, uint256 lockTranches);
+    event LockedTranche(address indexed user, uint256 amount, uint256 deadline);
 
-    event Locked(address indexed user, uint256 amount, uint256 lockTranches);
+    event Locked(address indexed user, uint256 amount, uint256 deadline);
 }
