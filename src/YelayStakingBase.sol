@@ -165,7 +165,7 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         require(amount > 0, "YelayStaking::_stake: Cannot stake 0");
 
         unchecked {
-            totalStaked = totalStaked += amount;
+            totalStaked += amount;
             balances[account] += amount;
         }
 
@@ -201,7 +201,7 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         uint256 amountUnlocked = sYlay.burnLockups(msg.sender);
 
         unchecked {
-            totalLocked = totalLocked -= amountUnlocked;
+            totalLocked -= amountUnlocked;
             locked[msg.sender] -= amountUnlocked;
         }
 
@@ -214,7 +214,7 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         }
 
         unchecked {
-            totalStaked = totalStaked -= amount;
+            totalStaked -= amount;
             balances[msg.sender] -= amount;
         }
 
@@ -239,9 +239,9 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
 
         unchecked {
-            totalLocked = totalLocked += trimmedAmount;
+            totalLocked += trimmedAmount;
             locked[msg.sender] += trimmedAmount;
-            totalStaked = totalStaked += amount;
+            totalStaked += amount;
             balances[msg.sender] += amount;
         }
 
@@ -253,7 +253,7 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         uint256 trimmedAmount = sYlay.migrateToLockup(msg.sender, position, deadline);
 
         unchecked {
-            totalLocked = totalLocked += trimmedAmount;
+            totalLocked += trimmedAmount;
             locked[msg.sender] += trimmedAmount;
         }
 
