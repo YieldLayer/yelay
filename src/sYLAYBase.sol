@@ -158,18 +158,16 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     mapping(address => uint256) public userLockupPower;
 
     struct Lockup {
-        uint256 amount;
-        uint256 power;
-        uint256 start;
-        uint256 deadline;
+        uint48 amount;
+        uint56 power;
+        uint64 start;
+        uint64 deadline;
     }
 
     mapping(address => mapping(uint256 => Lockup)) public userToTrancheIndexToLockup;
 
     // tightly packed lockup tranche indexes
     mapping(address => uint16[]) public userLockupIndexes;
-
-    // mapping(address => )
 
     /* ========== CONSTRUCTOR ========== */
 
@@ -197,7 +195,7 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
      */
     function totalSupply() external view override returns (uint256) {
         (GlobalGradual memory global,) = _getUpdatedGradual();
-        return totalInstantPower + _getTotalGradualVotingPower(global) + totalLockupPower;
+        return totalInstantPower + _getTotalGradualVotingPower(global) + _untrim(totalLockupPower);
     }
 
     /**
@@ -545,8 +543,8 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         userLockupPower[msg.sender] += addedPower;
 
         // adjust user specific lockup position
-        userLockup.power += addedPower;
-        userLockup.deadline = deadline;
+        userLockup.power += uint56(addedPower);
+        userLockup.deadline = uint64(deadline);
 
         emit LockupContinued(msg.sender, start, addedPower, deadline);
     }
@@ -575,10 +573,10 @@ contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
         userLockupPower[to] += power;
 
         // update user specific data
-        userLockup.amount += amount;
-        userLockup.power += power;
-        userLockup.start = start;
-        userLockup.deadline = deadline;
+        userLockup.amount += uint48(amount);
+        userLockup.power += uint56(power);
+        userLockup.start = uint64(start);
+        userLockup.deadline = uint64(deadline);
 
         emit LockupMinted(to, amount, power, start, deadline);
     }
