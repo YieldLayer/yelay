@@ -15,26 +15,18 @@ import {YelayOwner} from "src/YelayOwner.sol";
 import {sYLAYRewards} from "src/sYLAYRewards.sol";
 import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
 import {VoSPOOL, IVoSPOOL} from "spool/VoSPOOL.sol";
-import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
-import {YelayStaking, IERC20} from "src/YelayStaking.sol";
+import {sYLAYPostMigration, IsYLAYPostMigration, IsYLAYBase} from "src/sYLAYPostMigration.sol";
+import {YelayStakingPostMigration, IERC20} from "src/YelayStakingPostMigration.sol";
 import {YelayMigrator} from "src/YelayMigrator.sol";
 
 contract YelayStakingLockupTest is Test, Utilities {
     using ECDSA for bytes32;
-    // known addresses
-    // TODO as constants
 
-    YelayStaking spoolStaking = YelayStaking(0xc3160C5cc63B6116DD182faA8393d3AD9313e213);
-    IERC20 SPOOL = IERC20(0x40803cEA2b2A32BdA1bE61d3604af6a814E70976);
-    VoSPOOL voSPOOL = VoSPOOL(0xaF56D16a7fe479F2fcD48FF567fF589CB2d2a0E9);
-
-    // new
-    ISpoolOwner spoolOwner;
     YelayOwner yelayOwner;
     YLAY yLAY;
-    sYLAY sYlay;
+    sYLAYPostMigration sYlay;
     YelayRewardDistributor rewardDistributor;
-    YelayStaking yelayStaking;
+    YelayStakingPostMigration yelayStaking;
     YelayMigrator yelayMigrator;
     sYLAYRewards sYlayRewards;
 
@@ -65,51 +57,41 @@ contract YelayStakingLockupTest is Test, Utilities {
         uint256 deployerNonce = vm.getNonce(deployer);
 
         // Compute precomputed addresses based on the current nonce
-        address precomputedSpoolOwnerAddress = vm.computeCreateAddress(deployer, deployerNonce);
-        address precomputedYLAYImplementationAddress = vm.computeCreateAddress(deployer, deployerNonce + 1);
-        address precomputedYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 2);
-        address precomputedSYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 3);
-        address precomputedRewardDistributorAddress = vm.computeCreateAddress(deployer, deployerNonce + 4);
-        address precomputedYelayStakingAddress = vm.computeCreateAddress(deployer, deployerNonce + 5);
-        address precomputedMigratorAddress = vm.computeCreateAddress(deployer, deployerNonce + 6);
-        address precomputedSYLAYRewardsAddress = vm.computeCreateAddress(deployer, deployerNonce + 7);
+        address precomputedYLAYImplementationAddress = vm.computeCreateAddress(deployer, deployerNonce);
+        address precomputedYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 1);
+        address precomputedSYLAYAddress = vm.computeCreateAddress(deployer, deployerNonce + 2);
+        address precomputedRewardDistributorAddress = vm.computeCreateAddress(deployer, deployerNonce + 3);
+        address precomputedYelayStakingAddress = vm.computeCreateAddress(deployer, deployerNonce + 4);
+        address precomputedSYLAYRewardsAddress = vm.computeCreateAddress(deployer, deployerNonce + 5);
 
-        // Step 2: Deploy SpoolOwner at precomputedYLAYAddress
-        spoolOwner = new SpoolOwner();
-        assert(address(spoolOwner) == precomputedSpoolOwnerAddress);
-
-        // Step 3: Deploy YLAY at precomputedYLAYAddress
-        new YLAY(yelayOwner, precomputedMigratorAddress);
+        // Step 2: Deploy YLAY at precomputedYLAYAddress
+        new YLAY(yelayOwner, address(0));
         yLAY = YLAY(address(new ERC1967Proxy(precomputedYLAYImplementationAddress, "")));
         assert(address(yLAY) == precomputedYLAYAddress);
 
-        // Step 4: Deploy sYlay at precomputedSYLAYAddress
-        sYlay = new sYLAY(address(yelayOwner), address(voSPOOL), precomputedMigratorAddress);
+        // Step 3: Deploy sYlay at precomputedSYLAYAddress
+        sYlay = new sYLAYPostMigration(yelayOwner);
         assert(address(sYlay) == precomputedSYLAYAddress);
 
-        // Step 5: Deploy YelayRewardDistributor at precomputedRewardDistributorAddress
+        // Step 4: Deploy YelayRewardDistributor at precomputedRewardDistributorAddress
         rewardDistributor = new YelayRewardDistributor(yelayOwner);
         assert(address(rewardDistributor) == precomputedRewardDistributorAddress);
 
-        // Step 6: Deploy YelayStaking at precomputedYelayStakingAddress
-        yelayStaking = new YelayStaking(
-            address(yelayOwner),
+        // Step 5: Deploy YelayStaking at precomputedYelayStakingAddress
+        yelayStaking = new YelayStakingPostMigration(
             address(yLAY),
             address(sYlay),
             precomputedSYLAYRewardsAddress,
             address(rewardDistributor),
-            address(spoolStaking),
-            precomputedMigratorAddress
+            address(yelayOwner)
         );
         assert(address(yelayStaking) == precomputedYelayStakingAddress);
 
-        // Step 7: Deploy Migrator at precomputedMigratorAddress
-        yelayMigrator = new YelayMigrator(address(yelayOwner), yLAY, sYlay, address(yelayStaking), address(SPOOL));
-        assert(address(yelayMigrator) == precomputedMigratorAddress);
-
+        // Step 6: Deploy sYlayRewards at precomputedSYLAYRewardsAddress
         sYlayRewards = new sYLAYRewards(address(yelayStaking), address(sYlay), address(yelayOwner));
         assert(address(sYlayRewards) == precomputedSYLAYRewardsAddress);
 
+        // Step 7: Initialize the contracts
         yLAY.initialize();
         yelayStaking.initialize();
 
@@ -151,9 +133,6 @@ contract YelayStakingLockupTest is Test, Utilities {
         rewardToken1.transfer(address(rewardDistributor), 100000 ether);
         rewardToken2.transfer(address(rewardDistributor), 100000 ether);
         deal(address(yLAY), address(rewardDistributor), 100000 ether);
-
-        // enable staking
-        yelayStaking.setStakingStarted(true);
     }
 
     function setUp() public {

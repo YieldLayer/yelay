@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
+import {EIP712} from "openzeppelin-contracts/utils/cryptography/draft-EIP712.sol";
 import "openzeppelin-contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./YelayOwnable.sol";
 import "./libraries/SafeCast.sol";
 
-import "./interfaces/IYelayStakingBase.sol";
+import "./interfaces/IYelayStakingPostMigration.sol";
 import "./interfaces/IsYLAYRewards.sol";
-import "./interfaces/IsYLAY.sol";
+import "./interfaces/IsYLAYPostMigration.sol";
 import "./interfaces/IRewardDistributor.sol";
 
 /**
@@ -23,7 +25,7 @@ import "./interfaces/IRewardDistributor.sol";
  * At stake, gradual sYLAY (Yelay Voting Token) is minted and accumulated every week.
  * At unstake all sYLAY is burned. The maturing process of sYLAY restarts.
  */
-contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStakingBase {
+contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStakingPostMigration, EIP712 {
     using SafeERC20 for IERC20;
 
     /* ========== STRUCTS ========== */
@@ -50,7 +52,7 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     IERC20 public immutable stakingToken;
 
     /// @notice sYLAY token address
-    IsYLAY public immutable sYlay;
+    IsYLAYPostMigration public immutable sYlay;
 
     /// @notice sYLAY token rewards address
     IsYLAYRewards public immutable sYlayRewards;
@@ -80,6 +82,14 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     /// @dev if address is 0, noone staked for address (or unstaking was permitted)
     mapping(address => address) public stakedBy;
 
+    /// @notice Total YLAY locked. subset of totalStaked
+    uint256 public totalLocked;
+
+    /// @notice Account YLAY locked balance. subset of balances
+    mapping(address => uint256) public locked;
+
+    bytes32 private constant _TRANSFER_USER_TYPEHASH = keccak256("TransferUser(address to, uint256 deadline)");
+
     /* ========== CONSTRUCTOR ========== */
 
     /**
@@ -97,9 +107,9 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         address _sYlayRewards,
         address _rewardDistributor,
         address _yelayOwner
-    ) YelayOwnable(IYelayOwner(_yelayOwner)) {
+    ) YelayOwnable(IYelayOwner(_yelayOwner)) EIP712("YelayStaking", "1.0.0") {
         stakingToken = IERC20(_stakingToken);
-        sYlay = IsYLAY(_sYlay);
+        sYlay = IsYLAYPostMigration(_sYlay);
         sYlayRewards = IsYLAYRewards(_sYlayRewards);
         rewardDistributor = IRewardDistributor(_rewardDistributor);
     }
@@ -145,7 +155,60 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         return rewardTokens.length;
     }
 
+    /**
+     * @dev Returns the domain separator for the current chain.
+     */
+    function domainSeparatorV4() external view returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    /**
+     * @dev Returns the struct hash for hashTypedDataV4
+     */
+    function structHash(address from, uint256 deadline) public pure returns (bytes32) {
+        return keccak256(abi.encode(_TRANSFER_USER_TYPEHASH, from, deadline));
+    }
+
     /* ========== MUTATIVE FUNCTIONS ========== */
+
+    /**
+     * @notice Transfers the staking balance and rewards of one user to another.
+     * @dev This function is non-reentrant and updates rewards before transferring.
+     * @param to The address of the recipient to whom the staking data is transferred.
+     */
+    function transferUser(address to, uint256 deadline, bytes memory signature)
+        external
+        nonReentrant
+        updateRewards(msg.sender)
+    {
+        require(deadline > block.timestamp, "YelayStaking::transferUser: deadline has passed");
+
+        bytes32 hash_ = _hashTypedDataV4(structHash(msg.sender, deadline));
+        address signer = ECDSA.recover(hash_, signature);
+
+        require(signer == to, "YelayStaking::transferUser: invalid signature");
+
+        balances[to] = balances[msg.sender];
+        canStakeFor[to] = canStakeFor[msg.sender];
+        stakedBy[to] = stakedBy[msg.sender];
+
+        delete balances[msg.sender];
+        delete canStakeFor[msg.sender];
+        delete stakedBy[msg.sender];
+
+        uint256 _rewardTokensCount = rewardTokens.length;
+        for (uint256 i; i < _rewardTokensCount; i++) {
+            RewardConfiguration storage config = rewardConfiguration[rewardTokens[i]];
+
+            config.rewards[to] = config.rewards[msg.sender];
+            config.userRewardPerTokenPaid[to] = config.userRewardPerTokenPaid[msg.sender];
+
+            delete config.rewards[msg.sender];
+            delete config.userRewardPerTokenPaid[msg.sender];
+        }
+
+        sYlay.transferUser(msg.sender, to);
+    }
 
     function stake(uint256 amount) public virtual nonReentrant updateRewards(msg.sender) {
         _stake(msg.sender, amount);
@@ -159,7 +222,7 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         require(amount > 0, "YelayStaking::_stake: Cannot stake 0");
 
         unchecked {
-            totalStaked = totalStaked += amount;
+            totalStaked += amount;
             balances[account] += amount;
         }
 
@@ -189,24 +252,64 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
     }
 
     function unstake(uint256 amount) public nonReentrant notStakedBy updateRewards(msg.sender) {
-        require(amount > 0, "YelayStaking::unstake: Cannot withdraw 0");
-        require(amount <= balances[msg.sender], "YelayStaking::unstake: Cannot unstake more than staked");
+        // burn unlocked locks and get available amount to unstake now
+        uint256 amountUnlocked = sYlay.burnLockups(msg.sender);
+        uint256 available = balances[msg.sender] - (locked[msg.sender] - amountUnlocked);
+        require(amount > 0 && amount <= available, "YelayStaking::unstake: Unavailable amount requested");
 
+        // update state
         unchecked {
-            totalStaked = totalStaked -= amount;
+            totalLocked -= amountUnlocked;
+            locked[msg.sender] -= amountUnlocked;
+            totalStaked -= amount;
             balances[msg.sender] -= amount;
         }
-
-        stakingToken.safeTransfer(msg.sender, amount);
 
         // burn gradual sYLAY for the sender
         if (balances[msg.sender] == 0) {
             sYlay.burnGradual(msg.sender, 0, true);
         } else {
-            sYlay.burnGradual(msg.sender, amount, false);
+            uint256 amountToBurn = (amountUnlocked >= amount) ? 0 : amount - amountUnlocked;
+            uint256 amountToMint = (amountUnlocked >= amount) ? amountUnlocked - amount : 0;
+            sYlay.burnGradual(msg.sender, amountToBurn, false);
+            sYlay.mintGradual(msg.sender, amountToMint);
         }
 
+        // transfer amount to user
+        stakingToken.safeTransfer(msg.sender, amount);
+
         emit Unstaked(msg.sender, amount);
+    }
+
+    function lock(uint256 amount, uint256 deadline) external nonReentrant {
+        require(amount > 0, "YelayStaking::_lock: Cannot lock 0");
+
+        uint256 trimmedAmount = sYlay.mintLockup(msg.sender, amount, deadline);
+
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        unchecked {
+            totalLocked += trimmedAmount;
+            locked[msg.sender] += trimmedAmount;
+            totalStaked += amount;
+            balances[msg.sender] += amount;
+        }
+
+        emit Locked(msg.sender, amount, deadline);
+    }
+
+    function lockTranche(IsYLAYPostMigration.UserTranchePosition calldata position, uint256 deadline)
+        external
+        nonReentrant
+    {
+        uint256 trimmedAmount = sYlay.migrateToLockup(msg.sender, position, deadline);
+
+        unchecked {
+            totalLocked += trimmedAmount;
+            locked[msg.sender] += trimmedAmount;
+        }
+
+        emit LockedTranche(msg.sender, trimmedAmount, deadline);
     }
 
     function _getRewardForCompound(address account, bool doCompoundsYlayRewards)
