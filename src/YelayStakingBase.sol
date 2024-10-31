@@ -212,12 +212,10 @@ contract YelayStakingBase is ReentrancyGuardUpgradeable, YelayOwnable, IYelaySta
         if (balances[msg.sender] == 0) {
             sYlay.burnGradual(msg.sender, 0, true);
         } else {
-            sYlay.burnGradual(msg.sender, amount, false);
-        }
-
-        // use excess YLAY from unlocking to mint gradual sYLAY for the sender
-        if (amountUnlocked > amount) {
-            sYlay.mintGradual(msg.sender, amountUnlocked - amount);
+            uint256 amountToBurn = (amountUnlocked >= amount) ? 0 : amount - amountUnlocked;
+            uint256 amountToMint = (amountUnlocked >= amount) ? amountUnlocked - amount : 0;
+            sYlay.burnGradual(msg.sender, amountToBurn, false);
+            sYlay.mintGradual(msg.sender, amountToMint);
         }
 
         // transfer amount to user

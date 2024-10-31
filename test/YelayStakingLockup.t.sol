@@ -207,6 +207,10 @@ contract YelayStakingLockupTest is Test, Utilities {
         yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), deadline);
         assertApproxEqRel(sYlay.balanceOf(user1), 692.30769 ether, 1e10);
 
+        vm.prank(user1);
+        vm.expectRevert("sYLAY::migrateToLockup: Tranche already locked");
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), deadline);
+
         // lock ends (no user action)
         vm.warp(block.timestamp + 100 weeks); // week 145
         assertApproxEqRel(sYlay.balanceOf(user1), 692.30769 ether, 1e10);
@@ -215,6 +219,9 @@ contract YelayStakingLockupTest is Test, Utilities {
 
         // continue lock for 40 more weeks
         uint256 deadline2 = sYlay.getCurrentTrancheIndex() + 40;
+        vm.prank(user1);
+        vm.expectRevert("sYLAY::continueLockup: Lockup period exceeds a total of 4 years");
+        sYlay.continueLockup(lockTranche, deadline2 + 208);
         vm.prank(user1);
         sYlay.continueLockup(lockTranche, deadline2);
         assertApproxEqRel(sYlay.balanceOf(user1), 956.73076 ether, 1e10);
@@ -329,7 +336,19 @@ contract YelayStakingLockupTest is Test, Utilities {
 
         uint256 lockTranche = sYlay.getCurrentTrancheIndex();
         vm.prank(user1);
-        yelayStaking.lock(amount, lockTranche + 100);
+        vm.expectRevert("sYLAY::mintLockup: Invalid deadline");
+        yelayStaking.lock(amount, lockTranche + 209);
+
+        uint256 lockAmount = amount / 2;
+        vm.prank(user1);
+        yelayStaking.lock(lockAmount, lockTranche + 100);
+
+        vm.prank(user1);
+        vm.expectRevert("sYLAY::mintLockup: Lockup position already exists with different deadline");
+        yelayStaking.lock(amount, lockTranche + 101);
+
+        vm.prank(user1);
+        yelayStaking.lock(amount - lockAmount, lockTranche + 100);
 
         // lock ends (no user action)
         vm.warp(block.timestamp + 100 weeks);
@@ -342,5 +361,136 @@ contract YelayStakingLockupTest is Test, Utilities {
         assertEq(yelayStaking.balances(user1), 0);
         assertEq(sYlay.balanceOf(user1), 0);
         assertEq(received, amount);
+    }
+
+    /* -------------------------------------------------------------
+    |                  Scenario D                                  |
+    ----------------------------------------------------------------
+    | week |        action                  | sYLAY (user balance) |
+    |------|--------------------------------|----------------------|
+    |     1| user stakes 10000              | 0                    |
+    |    10| start                          | 432.69230            |
+    |    10| user locks 10000 for 100 weeks | 5240.38460           |
+    |    60| user unstakes 15000; fail      | 7644.23076           |
+    |   110| lock ends (no user action)     | 10048.07692          |
+    |   120| start                          | 10528.84615          |
+    |   120| continue lockup for 10 weeks   | 11057.69229          |
+    |   130| start                          | 11490.38461          |
+    |   130| user unstakes 15000/5000       | 0                    |
+    |   234| start                          | 2500/7500            |  
+    |   234| unstake 5000/15000             | 0                    |  
+    ------------------------------------------------------------- */
+    function test_shouldSatisfyScenarioD() public {
+        // user stakes 10000
+        vm.prank(user1);
+        yelayStaking.stake(10000 ether);
+        assertEq(yelayStaking.balances(user1), 10000 ether);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(sYlay.totalSupply(), 0);
+
+        vm.warp(block.timestamp + 9 weeks); // week 10
+        assertApproxEqRel(sYlay.balanceOf(user1), 432.6923 ether, 1e11);
+
+        // user locks 10000 for 100 weeks
+        uint256 start = sYlay.getCurrentTrancheIndex();
+        uint256 deadline = start + 100;
+        vm.prank(user1);
+        yelayStaking.lock(10000 ether, deadline);
+        assertApproxEqRel(sYlay.balanceOf(user1), 5240.3846 ether, 1e10);
+        assertApproxEqRel(sYlay.totalSupply(), 5240.3846 ether, 1e10);
+
+        vm.warp(block.timestamp + 50 weeks); // week 60
+        // user unstakes 10000; fail
+        vm.prank(user1);
+        vm.expectRevert("YelayStaking::unstake: Unavailable amount requested");
+        yelayStaking.unstake(15000 ether);
+        assertApproxEqRel(sYlay.balanceOf(user1), 7644.23076 ether, 1e10);
+        assertApproxEqRel(sYlay.totalSupply(), 7644.23076 ether, 1e10);
+
+        vm.warp(block.timestamp + 50 weeks); // week 110
+        assertApproxEqRel(sYlay.balanceOf(user1), 10048.07692 ether, 1e10);
+        assertApproxEqRel(sYlay.totalSupply(), 10048.07692 ether, 1e10);
+
+        vm.warp(block.timestamp + 10 weeks); // week 120
+        assertApproxEqRel(sYlay.balanceOf(user1), 10528.84615 ether, 1e10);
+        assertApproxEqRel(sYlay.totalSupply(), 10528.84615 ether, 1e10);
+
+        // continue lockup for 10 weeks
+        uint256 deadline2 = sYlay.getCurrentTrancheIndex() + 10;
+
+        vm.prank(user1);
+        vm.expectRevert("sYLAY::continueLockup: No lockup position found");
+        sYlay.continueLockup(start + 1, deadline2);
+
+        vm.prank(user1);
+        vm.expectRevert("sYLAY::continueLockup: Lockup deadline should be in the future");
+        sYlay.continueLockup(start, deadline2 - 20);
+
+        vm.prank(user1);
+        sYlay.continueLockup(start, deadline2);
+
+        assertApproxEqRel(sYlay.balanceOf(user1), 11490.38461 ether, 1e10);
+        assertApproxEqRel(sYlay.totalSupply(), 11490.38461 ether, 1e10);
+
+        // start
+        vm.warp(block.timestamp + 10 weeks); // week 130
+        assertApproxEqRel(sYlay.balanceOf(user1), 11971.15384 ether, 1e10);
+        assertApproxEqRel(sYlay.totalSupply(), 11971.15384 ether, 1e10);
+
+        uint256 snapshot = vm.snapshot();
+
+        // user unstakes 15000
+        vm.prank(user1);
+        yelayStaking.unstake(15000 ether);
+        assertEq(yelayStaking.balances(user1), 5000 ether);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(sYlay.totalSupply(), 0);
+
+        vm.warp(block.timestamp + 104 weeks); // week 234
+        assertEq(yelayStaking.balances(user1), 5000 ether);
+        assertEq(sYlay.balanceOf(user1), 2500 ether);
+        assertEq(sYlay.totalSupply(), 2500 ether);
+
+        // unstake 5000
+        vm.prank(user1);
+        yelayStaking.unstake(5000 ether);
+        assertEq(yelayStaking.balances(user1), 0);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(sYlay.totalSupply(), 0);
+
+        vm.revertTo(snapshot);
+
+        // user unstakes 5000
+        vm.prank(user1);
+        yelayStaking.unstake(5000 ether);
+        assertEq(yelayStaking.balances(user1), 15000 ether);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(sYlay.totalSupply(), 0);
+
+        vm.warp(block.timestamp + 104 weeks); // week 234
+        assertEq(yelayStaking.balances(user1), 15000 ether);
+        assertEq(sYlay.balanceOf(user1), 7500 ether);
+        assertEq(sYlay.totalSupply(), 7500 ether);
+
+        // unstake 5000
+        vm.prank(user1);
+        yelayStaking.unstake(15000 ether);
+        assertEq(yelayStaking.balances(user1), 0);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(sYlay.totalSupply(), 0);
+    }
+
+    function test_shouldFailToExecute() public {
+        vm.prank(user1);
+        vm.expectRevert("YelayStaking::_stake: Cannot stake 0");
+        yelayStaking.stake(0);
+
+        vm.prank(user1);
+        vm.expectRevert("YelayStaking::_lock: Cannot lock 0");
+        yelayStaking.lock(0, 0);
+
+        vm.prank(user1);
+        vm.expectRevert("YelayStaking::unstake: Unavailable amount requested");
+        yelayStaking.unstake(0);
     }
 }
