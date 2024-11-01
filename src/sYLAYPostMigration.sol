@@ -473,7 +473,7 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
 
     /*
      * @notice mint new lockup position
-     * @dev mint new lockup position for user. This is new stake being introcuded to the system.
+     * @dev mint new lockup position for user. This is new stake being introduced to the system.
      * @param to user to mint Lockup
      * @param amount amount to mint
      * @param deadline tranche index of lock end
@@ -509,8 +509,11 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
 
     function _burnLockup(UserLockup memory userLockup, address to, uint256 start) internal returns (uint256 amount) {
         // reduce global lockup powers
-        totalLockupPower -= userLockup.power;
-        userLockupPower[to] -= userLockup.power;
+        unchecked {
+            totalLockupPower -= userLockup.power;
+            userLockupPower[to] -= userLockup.power;
+        }
+
         amount = userLockup.amount;
 
         emit LockupBurned(to, start);
@@ -547,13 +550,13 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
         // calculate added lockup power
         uint256 addedPower = userLockup.amount * (deadline - userLockup.deadline) / FULL_POWER_TRANCHES_COUNT;
 
-        // update global lockup powers
-        totalLockupPower += addedPower;
-        userLockupPower[msg.sender] += addedPower;
-
-        // adjust user specific lockup position
-        userLockup.power += uint56(addedPower);
-        userLockup.deadline = uint64(deadline);
+        // update global lockup powers and adjust user specific lockup position
+        unchecked {
+            totalLockupPower += addedPower;
+            userLockupPower[msg.sender] += addedPower;
+            userLockup.power += uint56(addedPower);
+            userLockup.deadline = uint64(deadline);
+        }
 
         emit LockupContinued(msg.sender, start, addedPower, deadline);
     }
@@ -582,8 +585,10 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
         uint256 power = amount * period / FULL_POWER_TRANCHES_COUNT;
 
         // update globals
-        totalLockupPower += power;
-        userLockupPower[to] += power;
+        unchecked {
+            totalLockupPower += power;
+            userLockupPower[to] += power;
+        }
 
         // update user specific data
         userLockup.amount += uint48(amount);
@@ -724,12 +729,25 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
             }
         }
 
-        // Migrate user gradual and instant power
+        // migrate user lockups
+        uint16[] memory userLockupIndexesFrom = userLockupIndexes[from];
+        for (uint256 i = 0; i < userLockupIndexesFrom.length; i++) {
+            uint16 index = userLockupIndexesFrom[i];
+            userToTrancheIndexToLockup[to][index] = userToTrancheIndexToLockup[from][index];
+            delete userToTrancheIndexToLockup[from][index];
+        }
+        userLockupIndexes[to] = userLockupIndexesFrom;
+
+        // Migrate user gradual
         _userGraduals[to] = _userGraduals[from];
         delete _userGraduals[from];
 
+        // migrate user powers
         userInstantPower[to] = userInstantPower[from];
         delete userInstantPower[from];
+
+        userLockupPower[to] = userLockupPower[from];
+        delete userLockupPower[from];
 
         emit UserTransferred(from, to);
     }

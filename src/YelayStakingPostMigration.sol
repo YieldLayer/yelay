@@ -191,10 +191,12 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
         balances[to] = balances[msg.sender];
         canStakeFor[to] = canStakeFor[msg.sender];
         stakedBy[to] = stakedBy[msg.sender];
+        locked[to] = locked[msg.sender];
 
         delete balances[msg.sender];
         delete canStakeFor[msg.sender];
         delete stakedBy[msg.sender];
+        delete locked[msg.sender];
 
         uint256 _rewardTokensCount = rewardTokens.length;
         for (uint256 i; i < _rewardTokensCount; i++) {
@@ -210,6 +212,10 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
         sYlay.transferUser(msg.sender, to);
     }
 
+    /**
+     * @notice Stake YLAY tokens and start earning sYLAY gradually.
+     * @param amount The amount of YLAY to stake.
+     */
     function stake(uint256 amount) public virtual nonReentrant updateRewards(msg.sender) {
         _stake(msg.sender, amount);
 
@@ -230,6 +236,10 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
         sYlay.mintGradual(account, amount);
     }
 
+    /*
+       @notice Compounds YLAY rewards, and sYLAY rewards (if requested)
+       @param doCompoundsYlayRewards If true, compounds sYLAY rewards also.
+    */
     function compound(bool doCompoundsYlayRewards) external nonReentrant {
         // collect YLAY earned fom Yelay rewards and stake them
         uint256 reward = _getRewardForCompound(msg.sender, doCompoundsYlayRewards);
@@ -251,6 +261,11 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
         }
     }
 
+    /**
+     * @notice Unstake YLAY tokens, burn sYLAY and transfer YLAY back to the user.
+     * @dev remints any available YLAY that was not withdrawn.
+     * @param amount The amount of YLAY to unstake.
+     */
     function unstake(uint256 amount) public nonReentrant notStakedBy updateRewards(msg.sender) {
         // burn unlocked locks and get available amount to unstake now
         uint256 amountUnlocked = sYlay.burnLockups(msg.sender);
@@ -281,12 +296,19 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
         emit Unstaked(msg.sender, amount);
     }
 
+    /**
+     * @notice Lock YLAY tokens and receive corresponding sYLAY for lock period chosen.
+     * @param amount The amount of YLAY to lock.
+     * @param deadline The deadline for the lock. must be in the future.
+     */
     function lock(uint256 amount, uint256 deadline) external nonReentrant {
+        _lock(msg.sender, amount, deadline);
+    }
+
+    function _lock(address account, uint256 amount, uint256 deadline) private {
         require(amount > 0, "YelayStaking::_lock: Cannot lock 0");
 
-        uint256 trimmedAmount = sYlay.mintLockup(msg.sender, amount, deadline);
-
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 trimmedAmount = sYlay.mintLockup(account, amount, deadline);
 
         unchecked {
             totalLocked += trimmedAmount;
@@ -295,9 +317,17 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
             balances[msg.sender] += amount;
         }
 
-        emit Locked(msg.sender, amount, deadline);
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit Locked(account, amount, deadline);
     }
 
+    /**
+     * @notice Lock an existing gradual position with YLAY tokens, and receive corresponding sYLAY for lock period
+     *            chosen.
+     * @param position The position to lock.
+     * @param deadline The deadline for the lock. must be in the future.
+     */
     function lockTranche(IsYLAYPostMigration.UserTranchePosition calldata position, uint256 deadline)
         external
         nonReentrant
@@ -393,6 +423,11 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
 
     /* ========== RESTRICTED FUNCTIONS ========== */
 
+    /**
+     * @notice Stake YLAY tokens for another address.
+     * @param account The address for which the YLAY tokens are staked.
+     * @param amount The amount of YLAY to stake.
+     */
     function stakeFor(address account, uint256 amount)
         public
         virtual
@@ -405,6 +440,16 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
         stakedBy[account] = msg.sender;
 
         emit StakedFor(account, msg.sender, amount);
+    }
+
+    /**
+     * @notice Lock YLAY tokens for an address.
+     * @param account The address for which the YLAY tokens are locked.
+     * @param amount The amount of YLAY to lock.
+     * @param deadline The deadline for the lock. must be in the future.
+     */
+    function lockFor(address account, uint256 amount, uint256 deadline) external nonReentrant {
+        _lock(account, amount, deadline);
     }
 
     /**
@@ -639,7 +684,7 @@ contract YelayStakingPostMigration is ReentrancyGuardUpgradeable, YelayOwnable, 
             // verify address was staked by some other address
             require(stakedBy[account] != address(0), "YelayStaking::canStakeForAddress: Address already staked");
 
-            // verify address was staked by the sender or sender is the Yelay
+            // verify address was staked by the sender or sender is the Yelay owner
             require(
                 stakedBy[account] == msg.sender || isYelayOwner(),
                 "YelayStaking::canStakeForAddress: Address staked by another address"
