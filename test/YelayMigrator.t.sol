@@ -19,10 +19,10 @@ import {VoSpoolRewards, VoSpoolRewardUser} from "spool/VoSpoolRewards.sol";
 
 import {YLAY} from "../src/YLAY.sol";
 import {YelayOwner, IYelayOwner} from "../src/YelayOwner.sol";
-import {sYLAY, IsYLAY} from "../src/sYLAY.sol";
+import {sYLAY, IsYLAY} from "../src/migration/sYLAY.sol";
 import {sYLAYRewards} from "../src/sYLAYRewards.sol";
 import {YelayMigrator} from "../src/YelayMigrator.sol";
-import {YelayStaking} from "../src/YelayStaking.sol";
+import {YelayStaking} from "../src/migration/YelayStaking.sol";
 import {YelayRewardDistributor} from "../src/YelayRewardDistributor.sol";
 import {ConversionLib} from "../src/libraries/ConversionLib.sol";
 

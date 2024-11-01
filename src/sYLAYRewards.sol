@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import "./YelayOwnable.sol";
 
 import "./interfaces/IsYLAYRewards.sol";
-import "./interfaces/IsYLAYBase.sol";
+import "./interfaces/migration/IsYLAYBase.sol";
 
 /**
  * @notice Implementation of the {IsYLAYRewards} interface.

@@ -4,13 +4,13 @@ pragma solidity 0.8.13;
 import "openzeppelin-contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./YelayOwnable.sol";
-import "./libraries/SafeCast.sol";
+import "../YelayOwnable.sol";
+import "../libraries/SafeCast.sol";
 
-import "./interfaces/IYelayStakingBase.sol";
-import "./interfaces/IsYLAYRewards.sol";
-import "./interfaces/IsYLAY.sol";
-import "./interfaces/IRewardDistributor.sol";
+import "../interfaces/migration/IYelayStakingBase.sol";
+import "../interfaces/IsYLAYRewards.sol";
+import "../interfaces/migration/IsYLAY.sol";
+import "../interfaces/IRewardDistributor.sol";
 
 /**
  * @notice Implementation of the {IYelayStakingBase} interface.

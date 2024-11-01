@@ -15,8 +15,8 @@ import {YelayOwner} from "src/YelayOwner.sol";
 import {sYLAYRewards} from "src/sYLAYRewards.sol";
 import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
 import {VoSPOOL, IVoSPOOL} from "spool/VoSPOOL.sol";
-import {sYLAYPostMigration, IsYLAYPostMigration, IsYLAYBase} from "src/sYLAYPostMigration.sol";
-import {YelayStakingPostMigration, IERC20} from "src/YelayStakingPostMigration.sol";
+import {sYLAY, IsYLAY, IsYLAYBase} from "src/sYLAY.sol";
+import {YelayStaking, IERC20} from "src/YelayStaking.sol";
 import {YelayMigrator} from "src/YelayMigrator.sol";
 
 contract YelayStakingLockupTest is Test, Utilities {
@@ -24,9 +24,9 @@ contract YelayStakingLockupTest is Test, Utilities {
 
     YelayOwner yelayOwner;
     YLAY yLAY;
-    sYLAYPostMigration sYlay;
+    sYLAY sYlay;
     YelayRewardDistributor rewardDistributor;
-    YelayStakingPostMigration yelayStaking;
+    YelayStaking yelayStaking;
     YelayMigrator yelayMigrator;
     sYLAYRewards sYlayRewards;
 
@@ -70,7 +70,7 @@ contract YelayStakingLockupTest is Test, Utilities {
         assert(address(yLAY) == precomputedYLAYAddress);
 
         // Step 3: Deploy sYlay at precomputedSYLAYAddress
-        sYlay = new sYLAYPostMigration(yelayOwner);
+        sYlay = new sYLAY(yelayOwner);
         assert(address(sYlay) == precomputedSYLAYAddress);
 
         // Step 4: Deploy YelayRewardDistributor at precomputedRewardDistributorAddress
@@ -78,7 +78,7 @@ contract YelayStakingLockupTest is Test, Utilities {
         assert(address(rewardDistributor) == precomputedRewardDistributorAddress);
 
         // Step 5: Deploy YelayStaking at precomputedYelayStakingAddress
-        yelayStaking = new YelayStakingPostMigration(
+        yelayStaking = new YelayStaking(
             address(yLAY),
             address(sYlay),
             precomputedSYLAYRewardsAddress,
@@ -459,6 +459,70 @@ contract YelayStakingLockupTest is Test, Utilities {
         assertEq(sYlay.totalSupply(), 0);
     }
 
+    /* -------------------------------------------------------------
+    |                  Scenario E                                  |
+    ----------------------------------------------------------------
+    | week |        action                  | sYLAY (user balance) |
+    |------|--------------------------------|----------------------|
+    |     1| user stakes 10000              | 0                    |
+    |    10| start                          | 432.69230            |
+    |    10| user locks 10000 for 50 weeks  | 2836.53845           |
+    |    20| start                          | 3317.30768           |
+    |    20| user locks 10000 for 100 weeks | 8125.00000           |
+    |    60| start                          | 10048.07692          |
+    |    60| withdraw 5000                  | 4807.69230           |
+    |    70| start                          | 5528.84615           |
+    |   268| start                          | 25000                |
+    |   268| withdraw 25000                 | 0                    |
+    ------------------------------------------------------------- */
+    function test_shouldSatisfyScenarioE() public {
+        // user stakes 10000
+        vm.prank(user1);
+        yelayStaking.stake(10000 ether);
+        assertEq(yelayStaking.balances(user1), 10000 ether);
+        assertEq(sYlay.balanceOf(user1), 0);
+
+        vm.warp(block.timestamp + 9 weeks); // week 10
+        assertApproxEqRel(sYlay.balanceOf(user1), 432.6923 ether, 1e11);
+
+        // user locks 10000 for 50 weeks
+        uint256 start = sYlay.getCurrentTrancheIndex();
+        uint256 deadline = start + 50;
+        vm.prank(user1);
+        yelayStaking.lockFor(user1, 10000 ether, deadline);
+        assertApproxEqRel(sYlay.balanceOf(user1), 2836.53845 ether, 1e10);
+
+        vm.warp(block.timestamp + 10 weeks); // week 20
+        assertApproxEqRel(sYlay.balanceOf(user1), 3317.30768 ether, 1e10);
+
+        // user locks 10000 for 100 weeks
+        deadline = sYlay.getCurrentTrancheIndex() + 100;
+        vm.prank(user1);
+        yelayStaking.lockFor(user1, 10000 ether, deadline);
+        assertApproxEqRel(sYlay.balanceOf(user1), 8125.0 ether, 1e15);
+
+        vm.warp(block.timestamp + 40 weeks); // week 60
+        assertApproxEqRel(sYlay.balanceOf(user1), 10048.07692 ether, 1e10);
+
+        // withdraw 5000
+        vm.prank(user1);
+        yelayStaking.unstake(5000 ether);
+        assertApproxEqRel(sYlay.balanceOf(user1), 4807.6923 ether, 1e10);
+        assertApproxEqRel(yelayStaking.balances(user1), 25000 ether, 1e10);
+
+        vm.warp(block.timestamp + 10 weeks); // week 70
+        assertApproxEqRel(sYlay.balanceOf(user1), 5528.84615 ether, 1e10);
+
+        vm.warp(block.timestamp + 198 weeks); // week 268
+        assertApproxEqRel(sYlay.balanceOf(user1), 19807.6923 ether, 1e11);
+
+        // withdraw 25000
+        vm.prank(user1);
+        yelayStaking.unstake(25000 ether);
+        assertApproxEqRel(sYlay.balanceOf(user1), 0, 1e10);
+        assertApproxEqRel(yelayStaking.balances(user1), 0, 1e10);
+    }
+
     function test_shouldFailToExecute() public {
         vm.prank(user1);
         vm.expectRevert("YelayStaking::_stake: Cannot stake 0");
@@ -471,5 +535,141 @@ contract YelayStakingLockupTest is Test, Utilities {
         vm.prank(user1);
         vm.expectRevert("YelayStaking::unstake: Unavailable amount requested");
         yelayStaking.unstake(0);
+    }
+
+    function test_shouldLockForUserAndVerify() public {
+        uint256 amount = 10000 ether;
+        uint256 deadline = sYlay.getCurrentTrancheIndex() + 100;
+        vm.prank(user1);
+        yelayStaking.lockFor(user2, amount, deadline);
+        assertEq(yelayStaking.balances(user2), 10000 ether);
+        assertEq(yelayStaking.balances(user1), 0);
+    }
+
+    /// @notice Test transferUser functionality with reward rate setup
+    function test_transferUser() public {
+        // ARRANGE
+        uint256 stakeAmount = 1000 ether; // Amount to stake
+
+        // User1 stakes some amount
+        vm.prank(user1);
+        yelayStaking.stake(stakeAmount);
+
+        // User1 locks some amount
+        uint256 lockEnd = sYlay.getCurrentTrancheIndex() + 100;
+        vm.prank(user1);
+        yelayStaking.lock(stakeAmount, lockEnd);
+
+        // Simulate passing of 5 weeks to accumulate rewards
+        vm.warp(block.timestamp + 5 weeks);
+
+        // get user1 maturingAmount before
+        IsYLAYBase.UserGradual memory user1Gradual = sYlay.getUserGradual(user1);
+        IsYLAYBase.UserGradual memory user2Gradual;
+        uint256 maturingAmountBefore = user1Gradual.maturingAmount;
+
+        // Get current balances, locked, canStakeFor, and stakedBy for user1 before transfer
+        uint256 user1BalanceBefore = yelayStaking.balances(user1);
+        uint256 user1LockedBefore = yelayStaking.locked(user1);
+        bool user1CanStakeFor = yelayStaking.canStakeFor(user1);
+        address user1StakedBy = yelayStaking.stakedBy(user1);
+
+        // get sYLAY data before
+        uint256 user1sYLAYBefore = sYlay.balanceOf(user1);
+        uint256 user1LockupPowerBefore = sYlay.userLockupPower(user1);
+        uint16 userLockupIndexBefore = sYlay.userLockupIndexes(user1, 0);
+        sYLAY.UserLockup memory lockupBefore;
+        (lockupBefore.amount, lockupBefore.power, lockupBefore.start, lockupBefore.deadline) =
+            sYlay.userToTrancheIndexToLockup(user1, userLockupIndexBefore);
+
+        // Accumulated rewards for user1
+        uint256 earnedRewardToken1Before = yelayStaking.earned(rewardToken1, user1);
+
+        // ACT - Transfer user1 data to user2
+        vm.startPrank(user1);
+        {
+            uint256 deadline = block.timestamp;
+            bytes32 hash_ =
+                ECDSA.toTypedDataHash(yelayStaking.domainSeparatorV4(), yelayStaking.structHash(user2, deadline));
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1Pk, hash_);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            vm.expectRevert("YelayStaking::transferUser: deadline has passed");
+            yelayStaking.transferUser(user2, deadline, signature);
+        }
+        {
+            uint256 deadline = block.timestamp + 100;
+            bytes32 hash_ =
+                ECDSA.toTypedDataHash(yelayStaking.domainSeparatorV4(), yelayStaking.structHash(user1, deadline));
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1Pk, hash_);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            vm.expectRevert("YelayStaking::transferUser: invalid signature");
+            yelayStaking.transferUser(user2, deadline, signature);
+        }
+        {
+            uint256 deadline = block.timestamp + 100;
+            bytes32 hash_ =
+                ECDSA.toTypedDataHash(yelayStaking.domainSeparatorV4(), yelayStaking.structHash(user1, deadline));
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(user2Pk, hash_);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            yelayStaking.transferUser(user2, deadline, signature);
+        }
+        vm.stopPrank();
+
+        // ASSERT - Verify user2 has all the data from user1
+        assertEq(yelayStaking.balances(user2), user1BalanceBefore);
+        assertEq(yelayStaking.locked(user2), user1LockedBefore);
+        assertEq(yelayStaking.canStakeFor(user2), user1CanStakeFor);
+        assertEq(yelayStaking.stakedBy(user2), user1StakedBy);
+
+        // Verify sYlay transfer was also done
+        _verifySYlayTransferUser(user1sYLAYBefore, user1LockupPowerBefore, userLockupIndexBefore, lockupBefore);
+
+        // Check that user2 has the rewards transferred
+        assertEq(yelayStaking.earned(rewardToken1, user2), earnedRewardToken1Before);
+
+        // Verify user1 has no data
+        _verifyNoData(maturingAmountBefore, user1Gradual, user2Gradual);
+    }
+
+    function _verifyNoData(
+        uint256 maturingAmountBefore,
+        IsYLAYBase.UserGradual memory user1Gradual,
+        IsYLAYBase.UserGradual memory user2Gradual
+    ) private view {
+        assertEq(yelayStaking.balances(user1), 0);
+        assertEq(yelayStaking.locked(user1), 0);
+        assertEq(sYlay.balanceOf(user1), 0);
+        assertEq(yelayStaking.stakedBy(user1), address(0));
+        assertEq(yelayStaking.canStakeFor(user1), false);
+
+        ////// Assert user1 rewards are cleared
+        uint256 earnedRewardToken1After = yelayStaking.earned(rewardToken1, user1);
+        assertEq(earnedRewardToken1After, 0);
+
+        user1Gradual = sYlay.getUserGradual(user1);
+        user2Gradual = sYlay.getUserGradual(user2);
+
+        assertEq(user1Gradual.maturingAmount, 0);
+        assertEq(user2Gradual.maturingAmount, maturingAmountBefore);
+    }
+
+    function _verifySYlayTransferUser(
+        uint256 user1sYLAYBefore,
+        uint256 user1LockupPowerBefore,
+        uint16 userLockupIndexBefore,
+        sYLAY.UserLockup memory lockupBefore
+    ) private view {
+        // Verify sYlay transfer was also done
+        assertEq(sYlay.balanceOf(user2), user1sYLAYBefore);
+        assertEq(sYlay.userLockupPower(user2), user1LockupPowerBefore);
+        assertEq(sYlay.userLockupIndexes(user2, 0), userLockupIndexBefore);
+
+        (uint256 amount, uint256 power, uint256 start, uint256 deadline) =
+            sYlay.userToTrancheIndexToLockup(user2, userLockupIndexBefore);
+
+        assertEq(amount, lockupBefore.amount);
+        assertEq(power, lockupBefore.power);
+        assertEq(start, lockupBefore.start);
+        assertEq(deadline, lockupBefore.deadline);
     }
 }

@@ -5,9 +5,9 @@ import "./YelayOwnable.sol";
 import "./libraries/ConversionLib.sol";
 
 import "./interfaces/IERC20PausableOwnable.sol";
-import "./interfaces/IsYLAY.sol";
+import "./interfaces/migration/IsYLAY.sol";
 import "./interfaces/IYelayMigrator.sol";
-import "./interfaces/IYelayStaking.sol";
+import "./interfaces/migration/IYelayStaking.sol";
 import "./interfaces/IYLAY.sol";
 
 contract YelayMigrator is YelayOwnable, IYelayMigrator {

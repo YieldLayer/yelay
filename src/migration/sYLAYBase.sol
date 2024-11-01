@@ -2,8 +2,8 @@
 pragma solidity 0.8.13;
 
 import "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
-import "./YelayOwnable.sol";
-import "./interfaces/IsYLAYPostMigration.sol";
+import "../YelayOwnable.sol";
+import "../interfaces/migration/IsYLAYBase.sol";
 
 /**
  * @title Staked YLAY Implementation
@@ -48,7 +48,7 @@ import "./interfaces/IsYLAYPostMigration.sol";
  *      - RESTRICTION FUNCTIONS
  *      - MODIFIERS
  */
-contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20MetadataUpgradeable {
+contract sYLAYBase is YelayOwnable, IsYLAYBase, IERC20MetadataUpgradeable {
     /* ========== STRUCTS ========== */
 
     /**
@@ -103,21 +103,6 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
         UserTranche three;
     }
 
-    /**
-     * @notice user lockup struct
-     * @dev struct holds users lockup staking power values
-     * @member amount users amount locked
-     * @member power users lockup power
-     * @member start tranche index of lock start; either when migrated tranche was minted, or index of stake+lock
-     * @member deadline tranche index of lock end. max 4 years from start.
-     */
-    struct UserLockup {
-        uint48 amount;
-        uint56 power;
-        uint64 start;
-        uint64 deadline;
-    }
-
     /* ========== CONSTANTS ========== */
 
     /// @notice trim size value of the mint amount
@@ -168,18 +153,6 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
     /// @dev mapping users to its tranches
     mapping(address => mapping(uint256 => UserTranches)) public userTranches;
 
-    /// @notice total lockup power
-    uint256 public totalLockupPower;
-
-    /// @notice user lockup power
-    mapping(address => uint256) public userLockupPower;
-
-    /// @notice user lockup positions. address -> start tranche index -> lockup
-    mapping(address => mapping(uint256 => UserLockup)) public userToTrancheIndexToLockup;
-
-    /// @notice tightly packed lockup tranche indexes. 16 per word
-    mapping(address => uint16[]) public userLockupIndexes;
-
     /* ========== CONSTRUCTOR ========== */
 
     /**
@@ -206,7 +179,7 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
      */
     function totalSupply() external view override returns (uint256) {
         (GlobalGradual memory global,) = _getUpdatedGradual();
-        return totalInstantPower + _getTotalGradualVotingPower(global) + _untrim(totalLockupPower);
+        return totalInstantPower + _getTotalGradualVotingPower(global);
     }
 
     /**
@@ -215,7 +188,7 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
     function balanceOf(address account) external view override returns (uint256) {
         (UserGradual memory _userGradual,) = _getUpdatedGradualUser(account);
 
-        return userInstantPower[account] + _getUserGradualVotingPower(_userGradual) + _untrim(userLockupPower[account]);
+        return userInstantPower[account] + _getUserGradualVotingPower(_userGradual);
     }
 
     /**
@@ -423,182 +396,6 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
         }
     }
 
-    /* ---------- LOCKUP POWER: FUNCTIONS ---------- */
-
-    /**
-     * @notice migrate user tranche to lockup
-     * @dev user gradual power is reduced by the amount of the tranche and added to lockup system.
-     * @param to user to migrate
-     * @param userTranchePosition user tranche with amount
-     * @param deadline tranche index of lock end
-     */
-    function migrateToLockup(address to, UserTranchePosition calldata userTranchePosition, uint256 deadline)
-        external
-        onlyGradualMinter
-        updateGradual
-        updateGradualUser(to)
-        returns (uint256)
-    {
-        // get user tranche
-        UserTranche storage tranche = _getUserTrancheStorage(to, userTranchePosition);
-
-        // get global tranche
-        Tranche storage globalTranche = _getTranche(tranche.index);
-
-        // get amount and power earned for this tranche
-        uint48 amount = tranche.amount;
-
-        // ensure tranche has not already been locked
-        require(amount > 0, "sYLAY::migrateToLockup: Tranche already locked");
-
-        uint56 rawUnmaturedVotingPower = uint56(amount * (getCurrentTrancheIndex() - tranche.index));
-
-        // reduce user and global graduals
-        _userGraduals[to].maturingAmount -= amount;
-        _globalGradual.totalMaturingAmount -= amount;
-
-        _userGraduals[to].rawUnmaturedVotingPower -= rawUnmaturedVotingPower;
-        _globalGradual.totalRawUnmaturedVotingPower -= rawUnmaturedVotingPower;
-
-        // reduce user and global tranches
-        tranche.amount = 0;
-        globalTranche.amount -= amount;
-
-        _mintLockup(to, amount, tranche.index, deadline);
-
-        emit TrancheMigration(to, amount, tranche.index, rawUnmaturedVotingPower);
-
-        return _untrim(amount);
-    }
-
-    /*
-     * @notice mint new lockup position
-     * @dev mint new lockup position for user. This is new stake being introduced to the system.
-     * @param to user to mint Lockup
-     * @param amount amount to mint
-     * @param deadline tranche index of lock end
-     */
-    function mintLockup(address to, uint256 amount, uint256 deadline) external onlyGradualMinter returns (uint256) {
-        uint48 trimmedAmount = _trim(amount);
-        _mintLockup(to, trimmedAmount, getCurrentTrancheIndex(), deadline);
-        return _untrim(trimmedAmount);
-    }
-
-    function burnLockups(address to) external onlyGradualMinter returns (uint256 amount) {
-        uint256 currentTrancheIndex = getCurrentTrancheIndex();
-        uint16[] storage userLockupIndexes_ = userLockupIndexes[to];
-        uint256 userLockupCount_ = userLockupIndexes_.length;
-        for (uint256 i = 0; i < userLockupCount_;) {
-            uint16 start = userLockupIndexes_[i];
-            UserLockup memory userLockup = userToTrancheIndexToLockup[to][start];
-
-            if (_validBurn(currentTrancheIndex, userLockup)) {
-                amount += _burnLockup(userLockup, to, start);
-
-                // modify the array: swap the current element with the last element and then delete it
-                userLockupIndexes_[i] = userLockupIndexes_[userLockupCount_ - 1];
-                userLockupIndexes_.pop();
-                userLockupCount_--;
-            } else {
-                i++;
-            }
-        }
-
-        return _untrim(amount);
-    }
-
-    function _burnLockup(UserLockup memory userLockup, address to, uint256 start) internal returns (uint256 amount) {
-        // reduce global lockup powers
-        unchecked {
-            totalLockupPower -= userLockup.power;
-            userLockupPower[to] -= userLockup.power;
-        }
-
-        amount = userLockup.amount;
-
-        emit LockupBurned(to, start);
-
-        // remove user position
-        delete userToTrancheIndexToLockup[to][start];
-    }
-
-    function _validBurn(uint256 currentTrancheIndex, UserLockup memory userLockup) internal pure returns (bool) {
-        // the lock should not be burned already, and the deadline of the lock should have passed
-        return (userLockup.amount > 0 && currentTrancheIndex >= userLockup.deadline);
-    }
-
-    /**
-     * @notice continue lockup position
-     * @dev
-     *  - continue lockup position for user. This is stake being prolonged in the system. Prolonging is allowed either during or after lock expiry.
-     *  - unlike the other lockup functions, the user interacts with this function directly. There is no need to go through the gradual minter here.
-     * @param start tranche index of the lockup
-     * @param deadline tranche index of new lock end. Must be greater than the current deadline.
-     */
-    function continueLockup(uint256 start, uint256 deadline) external {
-        UserLockup storage userLockup = userToTrancheIndexToLockup[msg.sender][start];
-        // there should be lockup position to prolong
-        require(userLockup.amount > 0, "sYLAY::continueLockup: No lockup position found");
-        require(userLockup.deadline < deadline, "sYLAY::continueLockup: Lockup deadline should be in the future");
-
-        // whole lockup period should not exceed 4 years
-        require(
-            (deadline - start) <= FULL_POWER_TRANCHES_COUNT,
-            "sYLAY::continueLockup: Lockup period exceeds a total of 4 years"
-        );
-
-        // calculate added lockup power
-        uint256 addedPower = userLockup.amount * (deadline - userLockup.deadline) / FULL_POWER_TRANCHES_COUNT;
-
-        // update global lockup powers and adjust user specific lockup position
-        unchecked {
-            totalLockupPower += addedPower;
-            userLockupPower[msg.sender] += addedPower;
-            userLockup.power += uint56(addedPower);
-            userLockup.deadline = uint64(deadline);
-        }
-
-        emit LockupContinued(msg.sender, start, addedPower, deadline);
-    }
-
-    function _mintLockup(address to, uint256 amount, uint256 start, uint256 deadline) internal {
-        // total lockup should be less then whole period of 4 years
-        uint256 currentTrancheIndex = getCurrentTrancheIndex();
-        uint256 period = deadline - start;
-        require(
-            deadline > currentTrancheIndex && period <= FULL_POWER_TRANCHES_COUNT, "sYLAY::mintLockup: Invalid deadline"
-        );
-
-        UserLockup storage userLockup = userToTrancheIndexToLockup[to][start];
-        if (userLockup.amount > 0) {
-            // we allow to add to new position only with the same deadline
-            require(
-                userLockup.deadline == deadline,
-                "sYLAY::mintLockup: Lockup position already exists with different deadline"
-            );
-        } else {
-            // new lockup position
-            userLockupIndexes[to].push(uint16(start));
-        }
-
-        // calculate the user lockup power
-        uint256 power = amount * period / FULL_POWER_TRANCHES_COUNT;
-
-        // update globals
-        unchecked {
-            totalLockupPower += power;
-            userLockupPower[to] += power;
-        }
-
-        // update user specific data
-        userLockup.amount += uint48(amount);
-        userLockup.power += uint56(power);
-        userLockup.start = uint64(start);
-        userLockup.deadline = uint64(deadline);
-
-        emit LockupMinted(to, amount, power, start, deadline);
-    }
-
     /* ---------- GRADUAL POWER: MINT FUNCTIONS ---------- */
 
     /**
@@ -703,53 +500,6 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
         } else {
             _userTranches.three = tranche;
         }
-    }
-
-    /* ========== GRADUAL POWER: TRANSFER FUNCTIONS ========== */
-
-    /**
-     * @notice Transfers user data (staking and graduals) from one address to another.
-     * @param from The address of the user from whom data is being transferred.
-     * @param to The address of the recipient user.
-     */
-    function transferUser(address from, address to) external onlyGradualMinter {
-        require(_userGraduals[from].lastUpdatedTrancheIndex != 0, "sYLAY::migrate: User does not exist");
-        require(_userGraduals[to].lastUpdatedTrancheIndex == 0, "sYLAY::migrate: User already exists");
-
-        UserGradual memory _userGradual = _userGraduals[from];
-
-        // Migrate user tranches
-        if (_hasTranches(_userGradual)) {
-            uint256 fromIndex = _userGradual.oldestTranchePosition.arrayIndex;
-            uint256 toIndex = _userGradual.latestTranchePosition.arrayIndex;
-
-            for (uint256 i = fromIndex; i <= toIndex; i++) {
-                userTranches[to][i] = userTranches[from][i];
-                delete userTranches[from][i];
-            }
-        }
-
-        // migrate user lockups
-        uint16[] memory userLockupIndexesFrom = userLockupIndexes[from];
-        for (uint256 i = 0; i < userLockupIndexesFrom.length; i++) {
-            uint16 index = userLockupIndexesFrom[i];
-            userToTrancheIndexToLockup[to][index] = userToTrancheIndexToLockup[from][index];
-            delete userToTrancheIndexToLockup[from][index];
-        }
-        userLockupIndexes[to] = userLockupIndexesFrom;
-
-        // Migrate user gradual
-        _userGraduals[to] = _userGraduals[from];
-        delete _userGraduals[from];
-
-        // migrate user powers
-        userInstantPower[to] = userInstantPower[from];
-        delete userInstantPower[from];
-
-        userLockupPower[to] = userLockupPower[from];
-        delete userLockupPower[from];
-
-        emit UserTransferred(from, to);
     }
 
     /* ---------- GRADUAL POWER: BURN FUNCTIONS ---------- */
@@ -1160,31 +910,6 @@ contract sYLAYPostMigration is YelayOwnable, IsYLAYPostMigration, IERC20Metadata
         private
         view
         returns (UserTranche memory tranche)
-    {
-        UserTranches storage _userTranches = userTranches[user][userTranchePosition.arrayIndex];
-
-        if (userTranchePosition.position == 0) {
-            tranche = _userTranches.zero;
-        } else if (userTranchePosition.position == 1) {
-            tranche = _userTranches.one;
-        } else if (userTranchePosition.position == 2) {
-            tranche = _userTranches.two;
-        } else {
-            tranche = _userTranches.three;
-        }
-    }
-
-    /**
-     * @notice gets `user` `tranche` at position
-     *
-     * @param user user address to get tranche from
-     * @param userTranchePosition position to get the `tranche` from
-     * @return tranche `user` tranche (storage pointer)
-     */
-    function _getUserTrancheStorage(address user, UserTranchePosition memory userTranchePosition)
-        private
-        view
-        returns (UserTranche storage tranche)
     {
         UserTranches storage _userTranches = userTranches[user][userTranchePosition.arrayIndex];
 

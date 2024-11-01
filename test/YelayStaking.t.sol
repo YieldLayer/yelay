@@ -15,8 +15,8 @@ import {YelayOwner} from "src/YelayOwner.sol";
 import {sYLAYRewards} from "src/sYLAYRewards.sol";
 import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
 import {VoSPOOL, IVoSPOOL} from "spool/VoSPOOL.sol";
-import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
-import {YelayStaking, IERC20} from "src/YelayStaking.sol";
+import {sYLAY, IsYLAYBase} from "src/migration/sYLAY.sol";
+import {YelayStaking, IERC20} from "src/migration/YelayStaking.sol";
 import {YelayMigrator} from "src/YelayMigrator.sol";
 
 contract YelayStakingTest is Test, Utilities {

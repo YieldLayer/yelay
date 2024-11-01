@@ -12,11 +12,11 @@ import "test/shared/Utilities.sol";
 import "src/YLAY.sol";
 import {VoSPOOL} from "spool/VoSPOOL.sol";
 import {SpoolStaking} from "spool/SpoolStaking.sol";
-import {sYLAY, IsYLAYBase} from "src/sYLAY.sol";
+import {sYLAY, IsYLAYBase} from "src/migration/sYLAY.sol";
 import {sYLAYRewards} from "src/sYLAYRewards.sol";
 import {YelayOwner} from "src/YelayOwner.sol";
 import {YelayRewardDistributor} from "src/YelayRewardDistributor.sol";
-import {YelayStaking} from "src/YelayStaking.sol";
+import {YelayStaking} from "src/migration/YelayStaking.sol";
 import "src/YelayMigrator.sol";
 import "src/libraries/ConversionLib.sol";
 
