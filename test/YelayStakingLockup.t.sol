@@ -546,6 +546,97 @@ contract YelayStakingLockupTest is Test, Utilities {
         assertEq(yelayStaking.balances(user1), 0);
     }
 
+    function test_shouldVerifyViewCalls() public {
+        vm.startPrank(user1);
+        yelayStaking.stake(10000 ether);
+        vm.warp(block.timestamp + 1 weeks);
+        yelayStaking.stake(9000 ether);
+        vm.warp(block.timestamp + 1 weeks);
+        yelayStaking.stake(8000 ether);
+        vm.warp(block.timestamp + 1 weeks);
+        yelayStaking.stake(7000 ether);
+        vm.warp(block.timestamp + 1 weeks);
+        yelayStaking.stake(6000 ether);
+        vm.warp(block.timestamp + 1 weeks);
+        vm.stopPrank();
+
+        uint256 currentIndex = sYlay.getCurrentTrancheIndex();
+        IsYLAYBase.UserTranchePosition[] memory positions;
+        sYLAY.UserTranche[] memory tranches;
+
+        (positions, tranches) = sYlay.updatedUserTranches(user1);
+
+        assertEq(positions.length, 5);
+        assertEq(tranches.length, 5);
+        sYLAY.UserTranche memory tranche;
+
+        tranche = tranches[0];
+        assertEq(tranche.amount, _trim(10000 ether));
+        assertEq(tranche.index, currentIndex - 5);
+
+        tranche = tranches[1];
+        assertEq(tranche.amount, _trim(9000 ether));
+        assertEq(tranche.index, currentIndex - 4);
+
+        tranche = tranches[2];
+        assertEq(tranche.amount, _trim(8000 ether));
+        assertEq(tranche.index, currentIndex - 3);
+
+        tranche = tranches[3];
+        assertEq(tranche.amount, _trim(7000 ether));
+        assertEq(tranche.index, currentIndex - 2);
+
+        tranche = tranches[4];
+        assertEq(tranche.amount, _trim(6000 ether));
+        assertEq(tranche.index, currentIndex - 1);
+
+        uint256 balance = yelayStaking.balances(user1);
+
+        vm.prank(address(0));
+        uint256 available = yelayStaking.available(user1);
+
+        // verify available balance
+        assertEq(balance, available);
+
+        vm.startPrank(user1);
+        yelayStaking.unstake(yelayStaking.balances(user1));
+        vm.stopPrank();
+
+        // Verify tranches are empty after unstake
+        (, tranches) = sYlay.updatedUserTranches(user1);
+        assertEq(tranches.length, 0);
+
+        // restake, should have 1 tranche
+        vm.startPrank(user1);
+        yelayStaking.stake(10000 ether);
+        vm.warp(block.timestamp + 1 weeks);
+        vm.stopPrank();
+
+        (positions, tranches) = sYlay.updatedUserTranches(user1);
+        assertEq(tranches.length, 1);
+        assertEq(positions.length, 1);
+        tranche = tranches[0];
+        assertEq(tranche.amount, _trim(10000 ether));
+
+        // lock the stake
+        vm.startPrank(user1);
+        yelayStaking.lockTranche(positions[0], sYlay.getCurrentTrancheIndex() + 100);
+
+        // get lockups
+        sYLAY.UserLockup[] memory lockups = sYlay.userLockups(user1);
+
+        // verify Lockups
+        assertEq(lockups.length, 1);
+        sYLAY.UserLockup memory lockup = lockups[0];
+        assertEq(lockup.amount, _trim(10000 ether));
+        assertEq(lockup.start, tranche.index);
+        assertEq(lockup.deadline, sYlay.getCurrentTrancheIndex() + 100);
+    }
+
+    function _trim(uint256 amount) private pure returns (uint256) {
+        return amount / TRIM_SIZE;
+    }
+
     /// @notice Test transferUser functionality with reward rate setup
     function test_transferUser() public {
         // ARRANGE

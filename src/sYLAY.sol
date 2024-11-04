@@ -219,6 +219,42 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
     }
 
     /**
+     * @notice Returns current user lockups. easier access for integrations.
+     */
+    function userLockups(address account) external view returns (UserLockup[] memory lockups) {
+        uint16[] memory userLockupIndexes_ = userLockupIndexes[account];
+        lockups = new UserLockup[](userLockupIndexes_.length);
+        for (uint256 i = 0; i < userLockupIndexes_.length; i++) {
+            lockups[i] = userToTrancheIndexToLockup[account][userLockupIndexes_[i]];
+        }
+    }
+
+    /**
+     * @notice Returns current user tranches. easier access for integrations.
+     */
+    function updatedUserTranches(address account)
+        external
+        view
+        returns (UserTranchePosition[] memory positions, UserTranche[] memory tranches)
+    {
+        (UserGradual memory _userGradual,) = _getUpdatedGradualUser(account);
+
+        if (_hasTranches(_userGradual)) {
+            UserTranchePosition memory position = _userGradual.oldestTranchePosition;
+            uint256 totalTranches = _getTotalTranches(_userGradual);
+
+            tranches = new UserTranche[](totalTranches);
+            positions = new UserTranchePosition[](totalTranches);
+            for (uint256 i; i < tranches.length; i++) {
+                tranches[i] = _getUserTranche(account, position);
+                positions[i] = position;
+
+                position = _getNextUserTranchePosition(position);
+            }
+        }
+    }
+
+    /**
      * @dev Execution of function is prohibited to disallow token movement
      */
     function transfer(address, uint256) external pure override returns (bool) {
@@ -1223,6 +1259,19 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
     function _getUserGradualVotingPower(UserGradual memory _userGradual) private pure returns (uint256) {
         return _untrim(_userGradual.maturedVotingPower)
             + _getMaturingVotingPowerFromRaw(_untrim(_userGradual.rawUnmaturedVotingPower));
+    }
+
+    /**
+     * @notice Returns total tranches for user
+     * @dev total tranches for user between oldest and latest position.
+     * ((x2*4)+y2 - ((x1*4)+y1)) + 1
+     * where: latest.arrayIndex = x2, latest.position = y2
+     *        oldest.arrayIndex = x1, oldest.position = y1
+     */
+    function _getTotalTranches(UserGradual memory _userGradual) private pure returns (uint256) {
+        UserTranchePosition memory oldest = _userGradual.oldestTranchePosition;
+        UserTranchePosition memory latest = _userGradual.latestTranchePosition;
+        return ((latest.arrayIndex * 4) + latest.position) - ((oldest.arrayIndex * 4) + oldest.position) + 1;
     }
 
     /**

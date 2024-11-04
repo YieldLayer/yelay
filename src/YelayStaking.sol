@@ -262,20 +262,28 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
     }
 
     /**
+     * @notice Gets available YLAY to unstake for the account, considering burnt lockups.
+     * @dev This function is static-callable only; necessary stake updates are done in `unstake`.
+     * @param account The address of the account to check.
+     */
+    function available(address account) external returns (uint256 available_) {
+        require(msg.sender == address(0), "YelayStaking::available: Only static-callable");
+        (, available_) = _available(account);
+    }
+
+    /**
      * @notice Unstake YLAY tokens, burn sYLAY and transfer YLAY back to the user.
      * @dev remints any available YLAY that was not withdrawn.
      * @param amount The amount of YLAY to unstake.
      */
     function unstake(uint256 amount) public nonReentrant notStakedBy updateRewards(msg.sender) {
-        // burn unlocked locks and get available amount to unstake now
-        uint256 amountUnlocked = sYlay.burnLockups(msg.sender);
-        uint256 available = balances[msg.sender] - (locked[msg.sender] - amountUnlocked);
-        require(amount > 0 && amount <= available, "YelayStaking::unstake: Unavailable amount requested");
+        (uint256 unlocked, uint256 available_) = _available(msg.sender);
+        require(amount > 0 && amount <= available_, "YelayStaking::unstake: Unavailable amount requested");
 
         // update state
         unchecked {
-            totalLocked -= amountUnlocked;
-            locked[msg.sender] -= amountUnlocked;
+            totalLocked -= unlocked;
+            locked[msg.sender] -= unlocked;
             totalStaked -= amount;
             balances[msg.sender] -= amount;
         }
@@ -284,8 +292,8 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         if (balances[msg.sender] == 0) {
             sYlay.burnGradual(msg.sender, 0, true);
         } else {
-            uint256 amountToBurn = (amountUnlocked >= amount) ? 0 : amount - amountUnlocked;
-            uint256 amountToMint = (amountUnlocked >= amount) ? amountUnlocked - amount : 0;
+            uint256 amountToBurn = (unlocked >= amount) ? 0 : amount - unlocked;
+            uint256 amountToMint = (unlocked >= amount) ? unlocked - amount : 0;
             sYlay.burnGradual(msg.sender, amountToBurn, false);
             sYlay.mintGradual(msg.sender, amountToMint);
         }
@@ -320,6 +328,11 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
 
         emit Locked(account, amount, deadline);
+    }
+
+    function _available(address account) private returns (uint256 unlocked, uint256 available_) {
+        unlocked = sYlay.burnLockups(account);
+        available_ = balances[account] - (locked[account] - unlocked);
     }
 
     /**
