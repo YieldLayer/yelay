@@ -88,7 +88,7 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
     /// @notice Account YLAY locked balance. subset of balances
     mapping(address => uint256) public locked;
 
-    bytes32 private constant _TRANSFER_USER_TYPEHASH = keccak256("TransferUser(address to, uint256 deadline)");
+    bytes32 private constant _TRANSFER_USER_TYPEHASH = keccak256("TransferUser(address from, uint256 deadline)");
 
     /* ========== CONSTRUCTOR ========== */
 
