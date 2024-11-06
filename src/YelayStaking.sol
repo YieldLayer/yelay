@@ -107,7 +107,7 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         address _sYlayRewards,
         address _rewardDistributor,
         address _yelayOwner
-    ) YelayOwnable(IYelayOwner(_yelayOwner)) EIP712("YelayStaking", "1.0.0") {
+    ) YelayOwnable(IYelayOwner(_yelayOwner)) EIP712("YelayStaking", "1.0.1") {
         stakingToken = IERC20(_stakingToken);
         sYlay = IsYLAY(_sYlay);
         sYlayRewards = IsYLAYRewards(_sYlayRewards);
@@ -309,7 +309,7 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
      * @param amount The amount of YLAY to lock.
      * @param deadline The deadline for the lock. must be in the future.
      */
-    function lock(uint256 amount, uint256 deadline) external nonReentrant {
+    function lock(uint256 amount, uint256 deadline) external nonReentrant updateRewards(msg.sender) {
         _lock(msg.sender, amount, deadline);
     }
 
@@ -458,7 +458,7 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
      * @param amount The amount of YLAY to lock.
      * @param deadline The deadline for the lock. must be in the future.
      */
-    function lockFor(address account, uint256 amount, uint256 deadline) external nonReentrant {
+    function lockFor(address account, uint256 amount, uint256 deadline) external nonReentrant updateRewards(account) {
         _lock(account, amount, deadline);
     }
 
