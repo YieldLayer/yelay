@@ -722,6 +722,29 @@ contract YelayStakingLockupTest is Test, Utilities {
         _verifyNoData(maturingAmountBefore, user1Gradual, user2Gradual);
     }
 
+    function test_shouldMigrateToExistingTranche() public {
+        // ARRANGE
+        uint256 stakeAmount = 1000 ether; // Amount to stake
+        uint256 currentTrancheIndex = sYlay.getCurrentTrancheIndex();
+        uint256 deadline = currentTrancheIndex + 100;
+
+        // User1 locks some amount at current tranche index
+        vm.startPrank(user1);
+        yelayStaking.lock(stakeAmount, deadline);
+        yelayStaking.stake(stakeAmount);
+        vm.stopPrank();
+
+        // ACT
+        vm.warp(block.timestamp + 101 weeks);
+
+        vm.startPrank(user1);
+        vm.expectRevert("sYLAY::mintLockup: Lockup position already exists with different deadline");
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), deadline + 1);
+
+        yelayStaking.lockTranche(IsYLAYBase.UserTranchePosition(1, 0), deadline);
+        vm.stopPrank();
+    }
+
     function _verifyNoData(
         uint256 maturingAmountBefore,
         IsYLAYBase.UserGradual memory user1Gradual,

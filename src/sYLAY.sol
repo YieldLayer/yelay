@@ -599,13 +599,9 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
 
     function _mintLockup(address to, uint256 amount, uint256 start, uint256 deadline) internal {
         // total lockup should be less then whole period of 4 years
-        uint256 currentTrancheIndex = getCurrentTrancheIndex();
         uint256 period = deadline - start;
-        require(
-            deadline > currentTrancheIndex && period <= FULL_POWER_TRANCHES_COUNT, "sYLAY::mintLockup: Invalid deadline"
-        );
-
         UserLockup storage userLockup = userToTrancheIndexToLockup[to][start];
+
         if (userLockup.amount > 0) {
             // we allow to add to new position only with the same deadline
             require(
@@ -613,6 +609,10 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
                 "sYLAY::mintLockup: Lockup position already exists with different deadline"
             );
         } else {
+            require(
+                deadline > getCurrentTrancheIndex() && period <= FULL_POWER_TRANCHES_COUNT,
+                "sYLAY::mintLockup: Invalid deadline"
+            );
             // new lockup position
             userLockupIndexes[to].push(uint16(start));
         }
