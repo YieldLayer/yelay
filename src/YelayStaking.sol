@@ -189,14 +189,14 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         require(signer == to, "YelayStaking::transferUser: invalid signature");
 
         balances[to] = balances[msg.sender];
-        canStakeFor[to] = canStakeFor[msg.sender];
         stakedBy[to] = stakedBy[msg.sender];
         locked[to] = locked[msg.sender];
+        canStakeFor[to] = false;
 
         delete balances[msg.sender];
-        delete canStakeFor[msg.sender];
         delete stakedBy[msg.sender];
         delete locked[msg.sender];
+        delete canStakeFor[msg.sender];
 
         uint256 _rewardTokensCount = rewardTokens.length;
         for (uint256 i; i < _rewardTokensCount; i++) {

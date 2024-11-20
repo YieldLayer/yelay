@@ -487,6 +487,10 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         // ensure tranche has not already been locked
         require(amount > 0, "sYLAY::migrateToLockup: Tranche already locked");
 
+        // ensure tranche has not matured
+        uint16 lastMaturedIndex = _getLastMaturedIndex();
+        require(lastMaturedIndex == 0 || tranche.index > lastMaturedIndex, "sYLAY::migrateToLockup: Tranche matured");
+
         uint56 rawUnmaturedVotingPower = uint56(amount * (getCurrentTrancheIndex() - tranche.index));
 
         // reduce user and global graduals
@@ -749,8 +753,8 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      * @param to The address of the recipient user.
      */
     function transferUser(address from, address to) external onlyGradualMinter {
-        require(_userGraduals[from].lastUpdatedTrancheIndex != 0, "sYLAY::migrate: User does not exist");
-        require(_userGraduals[to].lastUpdatedTrancheIndex == 0, "sYLAY::migrate: User already exists");
+        require(_userExists(from), "sYLAY::migrate: User does not exist");
+        require(!_userExists(to), "sYLAY::migrate: User already exists");
 
         UserGradual memory _userGradual = _userGraduals[from];
 
@@ -770,9 +774,9 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         for (uint256 i = 0; i < userLockupIndexesFrom.length; i++) {
             uint16 index = userLockupIndexesFrom[i];
             userToTrancheIndexToLockup[to][index] = userToTrancheIndexToLockup[from][index];
-            delete userToTrancheIndexToLockup[from][index];
         }
         userLockupIndexes[to] = userLockupIndexesFrom;
+        delete userLockupIndexes[from];
 
         // Migrate user gradual
         _userGraduals[to] = _userGraduals[from];
@@ -1322,6 +1326,17 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         if (_userGradual.oldestTranchePosition.arrayIndex > 0) {
             hasTranches = true;
         }
+    }
+
+    /**
+     * @notice check if user exists in the system.
+     *
+     * @param account user address to check
+     * @return userExists true if user exists
+     */
+    function _userExists(address account) internal returns (bool) {
+        return _userGraduals[account].lastUpdatedTrancheIndex != 0 || userLockupPower[account] != 0
+            || userInstantPower[account] != 0;
     }
 
     /* ---------- GRADUAL POWER: HELPER FUNCTIONS ---------- */
