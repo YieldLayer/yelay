@@ -1334,7 +1334,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      * @param account user address to check
      * @return userExists true if user exists
      */
-    function _userExists(address account) internal returns (bool) {
+    function _userExists(address account) internal view returns (bool) {
         return _userGraduals[account].lastUpdatedTrancheIndex != 0 || userLockupPower[account] != 0
             || userInstantPower[account] != 0;
     }

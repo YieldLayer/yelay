@@ -488,7 +488,7 @@ contract YelayStakingLockupTest is Test, Utilities {
         // user locks 10000 for 50 weeks
         uint256 start = sYlay.getCurrentTrancheIndex();
         uint256 deadline = start + 50;
-        vm.prank(user1);
+        vm.prank(address(deployer));
         yelayStaking.lockFor(user1, 10000 ether, deadline);
         assertApproxEqRel(sYlay.balanceOf(user1), 2836.53845 ether, 1e10);
 
@@ -497,7 +497,7 @@ contract YelayStakingLockupTest is Test, Utilities {
 
         // user locks 10000 for 100 weeks
         deadline = sYlay.getCurrentTrancheIndex() + 100;
-        vm.prank(user1);
+        vm.prank(address(deployer));
         yelayStaking.lockFor(user1, 10000 ether, deadline);
         assertApproxEqRel(sYlay.balanceOf(user1), 8125.0 ether, 1e15);
 
@@ -541,8 +541,18 @@ contract YelayStakingLockupTest is Test, Utilities {
         uint256 amount = 10000 ether;
         uint256 deadline = sYlay.getCurrentTrancheIndex() + 100;
         vm.prank(user1);
+        vm.expectRevert("YelayStaking::canLockForAddress: Cannot lock for other addresses");
         yelayStaking.lockFor(user2, amount, deadline);
-        assertEq(yelayStaking.balances(user2), 10000 ether);
+
+        vm.startPrank(address(deployer));
+        yelayStaking.setCanLockFor(user1, true);
+        yelayStaking.lockFor(user2, amount, deadline);
+        vm.stopPrank();
+
+        vm.prank(user1);
+        yelayStaking.lockFor(user2, amount, deadline);
+
+        assertEq(yelayStaking.balances(user2), 20000 ether);
         assertEq(yelayStaking.balances(user1), 0);
     }
 

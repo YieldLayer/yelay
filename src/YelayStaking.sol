@@ -82,6 +82,9 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
     /// @dev if address is 0, noone staked for address (or unstaking was permitted)
     mapping(address => address) public stakedBy;
 
+    /// @notice Whitelist showing if address can lock for any another address
+    mapping(address => bool) public canLockFor;
+
     /// @notice Total YLAY locked. subset of totalStaked
     uint256 public totalLocked;
 
@@ -458,7 +461,12 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
      * @param amount The amount of YLAY to lock.
      * @param deadline The deadline for the lock. must be in the future.
      */
-    function lockFor(address account, uint256 amount, uint256 deadline) external nonReentrant updateRewards(account) {
+    function lockFor(address account, uint256 amount, uint256 deadline)
+        external
+        nonReentrant
+        canLockForAddress
+        updateRewards(account)
+    {
         _lock(account, amount, deadline);
     }
 
@@ -590,6 +598,21 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         emit CanStakeForSet(account, _canStakeFor);
     }
 
+    /**
+     * @notice Allow an address to lock for another address.
+     * @dev
+     * Requirements:
+     *
+     * - the caller must be the distributor
+     *
+     * @param account Address to allow
+     * @param _canLockFor True to allow, false to remove allowance
+     */
+    function setCanLockFor(address account, bool _canLockFor) external onlyOwner {
+        canLockFor[account] = _canLockFor;
+        emit CanLockForSet(account, _canLockFor);
+    }
+
     function recoverERC20(IERC20 tokenAddress, uint256 tokenAmount, address recoverTo) external onlyOwner {
         require(tokenAddress != stakingToken, "YelayStaking::recoverERC20: Cannot withdraw the staking token");
         tokenAddress.safeTransfer(recoverTo, tokenAmount);
@@ -703,6 +726,14 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         _;
     }
 
+    modifier canLockForAddress() {
+        // verify sender can lock for
+        require(
+            canLockFor[msg.sender] || isYelayOwner(), "YelayStaking::canLockForAddress: Cannot lock for other addresses"
+        );
+        _;
+    }
+
     modifier notStakedBy() {
         require(stakedBy[msg.sender] == address(0), "YelayStaking::notStakedBy: Cannot withdraw until allowed");
         _;
@@ -712,4 +743,11 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         _onlyFinished(token);
         _;
     }
+
+    /**
+     * @dev This empty reserved space is put in place to allow future
+     * versions to add new variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[47] private __gap;
 }
