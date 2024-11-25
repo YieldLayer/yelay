@@ -20,11 +20,11 @@
     "proxy": "0x3E246beb1A0daF94FB376C44cAc2D1C8B979C0d0"
   },
   "YelayStaking": {
-    "implementation": "0x9B3cBdbC97605d8f5c0e9f4822BA59e902Fd4360",
+    "implementation": "0x7fc74Dc0b8755f17BaFCaF92DfeD7Fd2cC5Cabf5",
     "proxy": "0x8e933387AFc6F0F67588e5Dac33EBa97eF988C69"
   },
   "sYLAY": {
-    "implementation": "0xdAac6595737a6a6F7EE7A84c00B529D5F2742B45",
+    "implementation": "0x6B9CFc771170789C9C4Bd07C6af916bdBe0330CF",
     "proxy": "0xC0F7B477e05B29097546dAae2E3dF2decBeB405d"
   },
   "sYLAYRewards": {
