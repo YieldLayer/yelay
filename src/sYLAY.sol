@@ -774,6 +774,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         for (uint256 i = 0; i < userLockupIndexesFrom.length; i++) {
             uint16 index = userLockupIndexesFrom[i];
             userToTrancheIndexToLockup[to][index] = userToTrancheIndexToLockup[from][index];
+            delete userToTrancheIndexToLockup[from][index];
         }
         userLockupIndexes[to] = userLockupIndexesFrom;
         delete userLockupIndexes[from];
