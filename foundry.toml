@@ -34,4 +34,5 @@ broadcast = 'broadcast/arbitrum-tenderly'
 cache_path = 'cache/local'
 broadcast = 'broadcast/local'
 
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}" } 

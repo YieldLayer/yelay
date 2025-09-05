@@ -296,9 +296,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      */
     function mint(address to, uint256 amount) external onlyMinter {
         totalInstantPower += amount;
-        unchecked {
-            userInstantPower[to] += amount;
-        }
+        userInstantPower[to] += amount;
         emit Minted(to, amount);
     }
 
@@ -316,10 +314,8 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      */
     function burn(address from, uint256 amount) external onlyMinter {
         require(userInstantPower[from] >= amount, "sYLAY:burn: User instant power balance too low");
-        unchecked {
-            userInstantPower[from] -= amount;
-            totalInstantPower -= amount;
-        }
+        userInstantPower[from] -= amount;
+        totalInstantPower -= amount;
         emit Burned(from, amount);
     }
 
@@ -424,9 +420,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      * @return trancheIndex tranche index at `time`
      */
     function _getTrancheIndex(uint256 time) private view returns (uint16) {
-        unchecked {
-            return uint16(((time - firstTrancheStartTime) / TRANCHE_TIME) + 1);
-        }
+        return uint16(((time - firstTrancheStartTime) / TRANCHE_TIME) + 1);
     }
 
     /**
@@ -454,9 +448,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      * @return trancheIndex last finished tranche index
      */
     function getLastFinishedTrancheIndex() public view returns (uint16) {
-        unchecked {
-            return getCurrentTrancheIndex() - 1;
-        }
+        return getCurrentTrancheIndex() - 1;
     }
 
     /* ---------- LOCKUP POWER: FUNCTIONS ---------- */
@@ -549,10 +541,8 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
 
     function _burnLockup(UserLockup memory userLockup, address to, uint256 start) internal returns (uint256 amount) {
         // reduce global lockup powers
-        unchecked {
-            totalLockupPower -= userLockup.power;
-            userLockupPower[to] -= userLockup.power;
-        }
+        totalLockupPower -= userLockup.power;
+        userLockupPower[to] -= userLockup.power;
 
         amount = userLockup.amount;
 
@@ -591,12 +581,10 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         uint256 addedPower = userLockup.amount * (deadline - userLockup.deadline) / FULL_POWER_TRANCHES_COUNT;
 
         // update global lockup powers and adjust user specific lockup position
-        unchecked {
-            totalLockupPower += addedPower;
-            userLockupPower[msg.sender] += addedPower;
-            userLockup.power += uint56(addedPower);
-            userLockup.deadline = uint64(deadline);
-        }
+        totalLockupPower += addedPower;
+        userLockupPower[msg.sender] += addedPower;
+        userLockup.power += uint56(addedPower);
+        userLockup.deadline = uint64(deadline);
 
         emit LockupContinued(msg.sender, start, addedPower, deadline);
     }
@@ -625,10 +613,8 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         uint256 power = amount * period / FULL_POWER_TRANCHES_COUNT;
 
         // update globals
-        unchecked {
-            totalLockupPower += power;
-            userLockupPower[to] += power;
-        }
+        totalLockupPower += power;
+        userLockupPower[to] += power;
 
         // update user specific data
         userLockup.amount += uint48(amount);
@@ -865,11 +851,9 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
 
             // if user still has some amount left, mint gradual from start
             if (userTotalGradualAmount > trimmedAmount) {
-                unchecked {
-                    uint48 userAmountLeft = userTotalGradualAmount - trimmedAmount;
-                    // mint amount left
-                    _mintGradual(from, userAmountLeft);
-                }
+                uint48 userAmountLeft = userTotalGradualAmount - trimmedAmount;
+                // mint amount left
+                _mintGradual(from, userAmountLeft);
             }
         }
     }
@@ -895,7 +879,16 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
     function _removeUserTrancheFromGlobal(UserTranche memory userTranche) private {
         if (userTranche.amount > 0) {
             Tranche storage tranche = _getTranche(userTranche.index);
-            tranche.amount -= userTranche.amount;
+            if (tranche.amount >= userTranche.amount) {
+                tranche.amount -= userTranche.amount;
+            } else {
+                // support rounding errors from migration
+                if (userTranche.amount - tranche.amount == 1) {
+                    tranche.amount = 0;
+                } else {
+                    revert("sYLAY::_removeUserTrancheFromGlobal: Tranche precision");
+                }
+            }
         }
     }
 
@@ -1248,9 +1241,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
     function _getLastMaturedIndex() private view returns (uint16 lastMaturedIndex) {
         uint256 currentTrancheIndex = getCurrentTrancheIndex();
         if (currentTrancheIndex > FULL_POWER_TRANCHES_COUNT) {
-            unchecked {
-                lastMaturedIndex = uint16(currentTrancheIndex - FULL_POWER_TRANCHES_COUNT);
-            }
+            lastMaturedIndex = uint16(currentTrancheIndex - FULL_POWER_TRANCHES_COUNT);
         }
     }
 
@@ -1364,9 +1355,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
     function _trimRoundUp(uint256 amount) private pure returns (uint48 trimmedAmount) {
         trimmedAmount = _trim(amount);
         if (_untrim(trimmedAmount) < amount) {
-            unchecked {
-                trimmedAmount++;
-            }
+            trimmedAmount++;
         }
     }
 
@@ -1377,9 +1366,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      * @return untrimmedAmount untrimmed amount
      */
     function _untrim(uint256 trimmedAmount) private pure returns (uint256) {
-        unchecked {
-            return trimmedAmount * TRIM_SIZE;
-        }
+        return trimmedAmount * TRIM_SIZE;
     }
 
     /**
@@ -1400,9 +1387,7 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
      * @return asRawUnmatured `amount` multiplied by `FULL_POWER_TRANCHES_COUNT` (raw unmatured amount)
      */
     function _getMaturedAsRawUnmaturedAmount(uint48 amount) private pure returns (uint56) {
-        unchecked {
-            return uint56(amount * FULL_POWER_TRANCHES_COUNT);
-        }
+        return uint56(amount * FULL_POWER_TRANCHES_COUNT);
     }
 
     /**
