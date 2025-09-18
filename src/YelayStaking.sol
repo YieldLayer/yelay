@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
-import {EIP712} from "openzeppelin-contracts/utils/cryptography/draft-EIP712.sol";
 import "openzeppelin-contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -25,7 +23,7 @@ import "./interfaces/IRewardDistributor.sol";
  * At stake, gradual sYLAY (Yelay Voting Token) is minted and accumulated every week.
  * At unstake all sYLAY is burned. The maturing process of sYLAY restarts.
  */
-contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking, EIP712 {
+contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking {
     using SafeERC20 for IERC20;
 
     /* ========== STRUCTS ========== */
@@ -91,8 +89,6 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
     /// @notice Account YLAY locked balance. subset of balances
     mapping(address => uint256) public locked;
 
-    bytes32 private constant _TRANSFER_USER_TYPEHASH = keccak256("TransferUser(address from, uint256 deadline)");
-
     /* ========== CONSTRUCTOR ========== */
 
     /**
@@ -110,7 +106,7 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         address _sYlayRewards,
         address _rewardDistributor,
         address _yelayOwner
-    ) YelayOwnable(IYelayOwner(_yelayOwner)) EIP712("YelayStaking", "1.0.1") {
+    ) YelayOwnable(IYelayOwner(_yelayOwner)) {
         stakingToken = IERC20(_stakingToken);
         sYlay = IsYLAY(_sYlay);
         sYlayRewards = IsYLAYRewards(_sYlayRewards);
@@ -158,62 +154,7 @@ contract YelayStaking is ReentrancyGuardUpgradeable, YelayOwnable, IYelayStaking
         return rewardTokens.length;
     }
 
-    /**
-     * @dev Returns the domain separator for the current chain.
-     */
-    function domainSeparatorV4() external view returns (bytes32) {
-        return _domainSeparatorV4();
-    }
-
-    /**
-     * @dev Returns the struct hash for hashTypedDataV4
-     */
-    function structHash(address from, uint256 deadline) public pure returns (bytes32) {
-        return keccak256(abi.encode(_TRANSFER_USER_TYPEHASH, from, deadline));
-    }
-
     /* ========== MUTATIVE FUNCTIONS ========== */
-
-    /**
-     * @notice Transfers the staking balance and rewards of one user to another.
-     * @dev This function is non-reentrant and updates rewards before transferring.
-     * @param to The address of the recipient to whom the staking data is transferred.
-     */
-    function transferUser(address to, uint256 deadline, bytes memory signature)
-        external
-        nonReentrant
-        updateRewards(msg.sender)
-    {
-        require(deadline > block.timestamp, "YelayStaking::transferUser: deadline has passed");
-
-        bytes32 hash_ = _hashTypedDataV4(structHash(msg.sender, deadline));
-        address signer = ECDSA.recover(hash_, signature);
-
-        require(signer == to, "YelayStaking::transferUser: invalid signature");
-
-        balances[to] = balances[msg.sender];
-        stakedBy[to] = stakedBy[msg.sender];
-        locked[to] = locked[msg.sender];
-        canStakeFor[to] = false;
-
-        delete balances[msg.sender];
-        delete stakedBy[msg.sender];
-        delete locked[msg.sender];
-        delete canStakeFor[msg.sender];
-
-        uint256 _rewardTokensCount = rewardTokens.length;
-        for (uint256 i; i < _rewardTokensCount; i++) {
-            RewardConfiguration storage config = rewardConfiguration[rewardTokens[i]];
-
-            config.rewards[to] = config.rewards[msg.sender];
-            config.userRewardPerTokenPaid[to] = config.userRewardPerTokenPaid[msg.sender];
-
-            delete config.rewards[msg.sender];
-            delete config.userRewardPerTokenPaid[msg.sender];
-        }
-
-        sYlay.transferUser(msg.sender, to);
-    }
 
     /**
      * @notice Stake YLAY tokens and start earning sYLAY gradually.

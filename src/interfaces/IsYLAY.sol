@@ -17,8 +17,6 @@ interface IsYLAY is IsYLAYBase {
 
     function burnLockups(address to) external returns (uint256 amount);
 
-    function transferUser(address from, address to) external;
-
     event TrancheMigration(address indexed user, uint256 amount, uint256 index, uint256 rawUnmaturedVotingPower);
 
     event LockupMinted(address indexed to, uint256 amount, uint256 power, uint256 startTranche, uint256 endTranche);
