@@ -29,7 +29,7 @@ contract TransferUserRemovalUpgrade is Script {
         sYLAY sylay = new sYLAY(IYelayOwner(json.getAddress(".YelayOwner")));
         vm.stopBroadcast();
 
-        json.addProxy("YelayStaking", address(sylay), json.getAddress(".YelayStaking.proxy"));
-        json.addProxy("sYLAY", address(yelayStaking), json.getAddress(".sYLAY.proxy"));
+        json.addProxy("YelayStaking", address(yelayStaking), json.getAddress(".YelayStaking.proxy"));
+        json.addProxy("sYLAY", address(sylay), json.getAddress(".sYLAY.proxy"));
     }
 }
