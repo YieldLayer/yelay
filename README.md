@@ -43,8 +43,6 @@ Token for Yelay.
 New staking contract, which inherits from `YelayStakingBase` (`SpoolStaking` before).  
 `YelayStakingBase` is a simple Synthetix reward contract, with added functionality to mint `sYLAY` (`voSPOOL` before). `YelayStaking` inherits the same properties.
 - `migrateUser`: migrate user stake from `SpoolStaking` to `YelayStaking`. Only callable by the `YelayMigrator` contract. _Note: This contract should also migrate SPOOL rewards from SpoolStaking and voSPOOL, as after SPOOL is paused they are not claimable. Currently, it gets SPOOL rewards from SpoolStaking only, as getting latest voSPOOL rewards earned is not possible via a view function. However, SpoolStaking and voSPOOLRewards are upgradeable, so it would be possible to add a function on SpoolStaking to get them, and upgrade SpoolStaking._
-
-- `transferUser`: Allows a user to migrate their stake to another wallet (e.g. if they want to transfer from a hot wallet to a cold wallet). The new wallet must NOT be an existing staker.  
 All other `SpoolStaking` functions stay in place.
 
 ---
@@ -80,8 +78,6 @@ Functions in sYLAY:
 - `migrateInitial`: prerequisite to start migration
 - `migrateGlobalTranches`: allows the migrator contract to migrate global tranches from VoSPOOL to sYLAY. Performs conversion as above.
 - `migrateUser`: allows the migrator contract to migrate user tranches and user global from VoSPOOL to sYLAY. Performs conversion as above.
-- `transferUser`: allows the user, via the migrator contract, to transfer sYLAY state from one address to another.
-
 
 # The Migration Flow
 

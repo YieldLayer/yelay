@@ -731,54 +731,6 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         }
     }
 
-    /* ========== GRADUAL POWER: TRANSFER FUNCTIONS ========== */
-
-    /**
-     * @notice Transfers user data (staking and graduals) from one address to another.
-     * @param from The address of the user from whom data is being transferred.
-     * @param to The address of the recipient user.
-     */
-    function transferUser(address from, address to) external onlyGradualMinter {
-        require(_userExists(from), "sYLAY::migrate: User does not exist");
-        require(!_userExists(to), "sYLAY::migrate: User already exists");
-
-        UserGradual memory _userGradual = _userGraduals[from];
-
-        // Migrate user tranches
-        if (_hasTranches(_userGradual)) {
-            uint256 fromIndex = _userGradual.oldestTranchePosition.arrayIndex;
-            uint256 toIndex = _userGradual.latestTranchePosition.arrayIndex;
-
-            for (uint256 i = fromIndex; i <= toIndex; i++) {
-                userTranches[to][i] = userTranches[from][i];
-                delete userTranches[from][i];
-            }
-        }
-
-        // migrate user lockups
-        uint16[] memory userLockupIndexesFrom = userLockupIndexes[from];
-        for (uint256 i = 0; i < userLockupIndexesFrom.length; i++) {
-            uint16 index = userLockupIndexesFrom[i];
-            userToTrancheIndexToLockup[to][index] = userToTrancheIndexToLockup[from][index];
-            delete userToTrancheIndexToLockup[from][index];
-        }
-        userLockupIndexes[to] = userLockupIndexesFrom;
-        delete userLockupIndexes[from];
-
-        // Migrate user gradual
-        _userGraduals[to] = _userGraduals[from];
-        delete _userGraduals[from];
-
-        // migrate user powers
-        userInstantPower[to] = userInstantPower[from];
-        delete userInstantPower[from];
-
-        userLockupPower[to] = userLockupPower[from];
-        delete userLockupPower[from];
-
-        emit UserTransferred(from, to);
-    }
-
     /* ---------- GRADUAL POWER: BURN FUNCTIONS ---------- */
 
     /**
@@ -1318,17 +1270,6 @@ contract sYLAY is YelayOwnable, IsYLAY, IERC20MetadataUpgradeable {
         if (_userGradual.oldestTranchePosition.arrayIndex > 0) {
             hasTranches = true;
         }
-    }
-
-    /**
-     * @notice check if user exists in the system.
-     *
-     * @param account user address to check
-     * @return userExists true if user exists
-     */
-    function _userExists(address account) internal view returns (bool) {
-        return _userGraduals[account].lastUpdatedTrancheIndex != 0 || userLockupPower[account] != 0
-            || userInstantPower[account] != 0;
     }
 
     /* ---------- GRADUAL POWER: HELPER FUNCTIONS ---------- */
