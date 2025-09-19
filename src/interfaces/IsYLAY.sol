@@ -24,6 +24,4 @@ interface IsYLAY is IsYLAYBase {
     event LockupBurned(address indexed to, uint256 lockTranche);
 
     event LockupContinued(address indexed to, uint256 lockTranche, uint256 addedPower, uint256 endTranche);
-
-    event UserTransferred(address indexed from, address indexed to);
 }
